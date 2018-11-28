@@ -96,7 +96,7 @@ def get_youngest_accuseds(accuseds: list) -> list:
 
 def get_detail(lines: filter) -> (set, list, set):
     # --- custom ---
-    from conf import CONTACT_INFOS, DRUGS, PAYMENTS, QUANTIFIER
+    from conf import CONTACT_INFOS, DRUGS, DRUGS_SOURCE, PAYMENTS, QUANTIFIER, SHIPPINGS
 
     def get_contact_info(line: str, contact_infos: set):
         for contact_info in CONTACT_INFOS:
@@ -127,9 +127,15 @@ def get_detail(lines: filter) -> (set, list, set):
             if payment in line:
                 payments.add(payment)
 
+    def get_shipping(line: str, shippings: set):
+        for shipping in SHIPPINGS:
+            if shipping in line:
+                shippings.add(shipping)
+
     contact_infos = set()
     drugs = []
     payments = set()
+    # shippings = set()
 
     line = ''
     while not line.endswith('判决如下：'):
@@ -138,6 +144,7 @@ def get_detail(lines: filter) -> (set, list, set):
         get_contact_info(line, contact_infos)
         get_drug(line, drugs)
         get_payment(line, payments)
+        # get_shipping(line, shippings)
 
     return contact_infos, drugs, payments
 
@@ -205,28 +212,32 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
     return name, accusations, parse_prison_term(*prison_term), sum(map(parse_forfeit, forfeit)), forfeit_type
 
 
-# for d in all_cases():
-#     for d in d:
-#         for f in d:
-#             print(f)
+def test_case():
+    lines = read_doc('（2018）浙0281刑初30号.docx')
+    case_id = get_case_id(lines)
+    print(case_id)
+    court = get_court(lines)
+    print(court)
+    accuseds = get_accuseds(lines)
+    print(accuseds)
+    youngest_accused = get_youngest_accuseds(accuseds)
+    print(youngest_accused)
+    contact_infos, drugs, payments = get_detail(lines)
+    print(contact_infos, drugs, payments)
+    (
+        first_accused_name,
+        first_accused_accusation,
+        first_accused_prison_term,
+        first_accused_forfeit,
+        first_accused_forfeit_type
+    ) = get_first_accused_judgement(lines)
+    print(first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
 
 
-lines = read_doc('（2018）浙0281刑初30号.docx')
-case_id = get_case_id(lines)
-print(case_id)
-court = get_court(lines)
-print(court)
-accuseds = get_accuseds(lines)
-print(accuseds)
-youngest_accused = get_youngest_accuseds(accuseds)
-print(youngest_accused)
-detail = get_detail(lines)
-print(detail)
-(
-    first_accused_name,
-    first_accused_accusation,
-    first_accused_prison_term,
-    first_accused_forfeit,
-    first_accused_forfeit_type
-) = get_first_accused_judgement(lines)
-print(first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
+if __name__ == '__main__':
+    test_case()
+
+    # for d in all_cases():
+    #     for d in d:
+    #         for f in d:
+    #             print(f)
