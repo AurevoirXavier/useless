@@ -26,7 +26,7 @@ def all_cases(path: str = '.') -> map:
 
 def read_doc(f: str) -> filter:
     # --- std ---
-    from os import remove, path
+    from os import remove, rename, path
     from subprocess import DEVNULL, call
     # --- external ---
     from docx import Document
@@ -38,7 +38,10 @@ def read_doc(f: str) -> filter:
         call(['soffice', '--headless', '--convert-to', 'docx', doc, '--outdir', f'{path.dirname(doc)}'], stdout=DEVNULL)
         remove(doc)
 
-    if f.endswith('.doc'):
+    if f.endswith('DOC'):
+        f = f'{f[:-3]}doc'
+
+    if f.endswith('doc'):
         convert_doc(f)
         f = f'{f}x'
 
@@ -63,33 +66,37 @@ def get_court(lines: filter) -> str:
 
 
 def parse_int(number: str) -> int:
-    if number == '十':
-        return 10
-    elif number == '十万':
-        return 100000
+    try:
+        return int(number)
+    except ValueError:
+        if number == '十':
+            return 10
+        elif number == '十万':
+            return 100000
 
-    def parse_int(x: str) -> str:
+        def parse_int(x: str) -> str:
+            return {
+                '0': '0',
+                '○': '0',
+                '〇': '0',
+                '零': '0',
+                '一': '1',
+                '二': '2',
+                '三': '3',
+                '四': '4',
+                '五': '5',
+                '六': '6',
+                '七': '7',
+                '八': '8',
+                '九': '9'
+            }.get(x, '')
+
         return {
-            '○': '0',
-            '〇': '0',
-            '零': '0',
-            '一': '1',
-            '二': '2',
-            '三': '3',
-            '四': '4',
-            '五': '5',
-            '六': '6',
-            '七': '7',
-            '八': '8',
-            '九': '9'
-        }.get(x, '')
-
-    return {
-               '十': 10,
-               '百': 100,
-               '千': 1000,
-               '万': 10000
-           }.get(number[-1], 1) * int(''.join(map(parse_int, number)))
+                   '十': 10,
+                   '百': 100,
+                   '千': 1000,
+                   '万': 10000
+               }.get(number[-1], 1) * int(''.join(map(parse_int, number)))
 
 
 def parse_date(date: str) -> (int, int, int):
@@ -101,7 +108,7 @@ def parse_date(date: str) -> (int, int, int):
 
 
 def get_accuseds(lines: filter) -> list:
-    from conf import ACCUSED_INFO
+    from conf import ACCUSED_INFOS
 
     line = next(lines)
     if '原告人' in line:  # skip accuser
@@ -109,18 +116,31 @@ def get_accuseds(lines: filter) -> list:
 
     accuseds = []
     while line.startswith('被告人'):
-        matched = re.match(ACCUSED_INFO, line)
+        for accused_info in ACCUSED_INFOS:
+            try:
+                matched = re.match(accused_info, line)
 
-        accused = {
-            'name': matched.group(1).split('（')[0],
-            'sexual': matched.group(2).replace('，', ''),
-            'birthday': matched.group(3),
-            'nation': matched.group(4),
-            'education': matched.group(5),
-            'occupation': matched.group(6),
-            'native_place': re.sub(r'(户籍地|家住|住)', '', matched.group(7))[0:-1]
-        }
-        accuseds.append(accused)
+                nation = matched.group(4)
+                if '族' in nation:
+                    birthday = matched.group(3)
+                else:
+                    nation = matched.group(3)
+                    birthday = matched.group(4)
+
+                accused = {
+                    'name': matched.group(1).split('（')[0],
+                    'sexual': matched.group(2).replace('，', ''),
+                    'birthday': birthday,
+                    'nation': nation,
+                    'education': matched.group(5),
+                    'occupation': matched.group(6),
+                    'native_place': matched.group(7)
+                }
+                accuseds.append(accused)
+
+                break
+            except AttributeError:
+                continue
 
         line = next(lines)
         if '辩护人' in line:  # skip attorney
@@ -162,26 +182,33 @@ def get_detail(lines: filter) -> (set, list, set):
 
         for drug in DRUGS:
             if drug in line:
-                for quantifier in QUANTIFIERS:
-                    matched = re.search(quantifier, line)
-                    try:
-                        if '元' in matched.group(1):
-                            price = matched.group(1)
-                            amount = matched.group(2)
-                        else:
-                            price = matched.group(2)
-                            amount = matched.group(1)
+                try:
+                    matched = re.search(r'(\d+|\d+\.\d+)克，每克(d+)元', line)
+                    amount = float(matched.group(1))
+                    price_per_gram = float(matched.group(2))
+                    drugs.append((drug, amount * price_per_gram, f'{amount}克', f'{price_per_gram}元/克'))
+                    return
+                except AttributeError:
+                    for quantifier in QUANTIFIERS:
+                        matched = re.search(quantifier, line)
+                        try:
+                            if '元' in matched.group(1):
+                                price = matched.group(1)
+                                amount = matched.group(2)
+                            else:
+                                price = matched.group(2)
+                                amount = matched.group(1)
 
-                        unit_price = ''
-                        amount_ = split_float(amount)
-                        if amount_[1] == '克':
-                            price_ = split_float(price)
-                            unit_price = f'{price_[0] // amount_[0]}{price_[1]}/{amount_[1]}'
+                            unit_price = ''
+                            amount_ = split_float(amount)
+                            if amount_[1] in '克粒':
+                                price_ = split_float(price)
+                                unit_price = f'{round(price_[0] / amount_[0], 1)}{price_[1]}/{amount_[1]}'
 
-                        drugs.append((price, f'{amount_[0]}{amount_[1]}', drug, unit_price))
-                        break
-                    except AttributeError:
-                        continue
+                            drugs.append((drug, price, f'{amount_[0]}{amount_[1]}', unit_price))
+                            return
+                        except AttributeError:
+                            continue
 
     def get_payment(line: str, payments: set):
         for payment in PAYMENTS:
@@ -237,6 +264,8 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
     forfeit = []
     prison_term = ('', '')
     for info in infos:
+        info = ''.join(info.split())
+
         try:
             matched = re.search(r'(罚金|没收财产)(人民币)?(.+)元', info)
             forfeit.append(matched.group(3))
@@ -265,7 +294,7 @@ def parse_doc(path: str):
     court = get_court(lines)
     print('法院: ', court)
     accuseds = get_accuseds(lines)
-    print('被告人: ',accuseds)
+    print('被告人: ', accuseds)
     min_birthday = get_min_birthday(accuseds)
     print('最小出生日期: ', min_birthday)
     contact_infos, drugs, payments = get_detail(lines)
@@ -285,17 +314,17 @@ def parse_doc(path: str):
 def test_case(path: str):
     lines = read_doc(path)
     case_id = get_case_id(lines)
-    # print('案号: ', case_id)
+    print('案号: ', case_id)
     court = get_court(lines)
-    # print('法院: ', court)
+    print('法院: ', court)
     accuseds = get_accuseds(lines)
-    # print('被告人: ',accuseds)
+    print('被告人: ', accuseds)
     min_birthday = get_min_birthday(accuseds)
-    # print('最小出生日期: ', min_birthday)
+    print('最小出生日期: ', min_birthday)
     contact_infos, drugs, payments = get_detail(lines)
-    # print('联系方式: ', contact_infos)
-    # print('毒品: ', drugs)
-    # print('支付方式: ', payments)
+    print('联系方式: ', contact_infos)
+    print('毒品: ', drugs)
+    print('支付方式: ', payments)
     (
         first_accused_name,
         first_accused_accusation,
