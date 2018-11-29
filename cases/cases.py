@@ -26,7 +26,7 @@ def all_cases(path: str = '.') -> map:
 
 def read_doc(f: str) -> filter:
     # --- std ---
-    from os import remove
+    from os import remove, path
     from subprocess import DEVNULL, call
     # --- external ---
     from docx import Document
@@ -34,10 +34,15 @@ def read_doc(f: str) -> filter:
     def strip_doc(doc: list) -> filter:
         return filter(lambda _: _, map(lambda line: line.text.strip(), doc))
 
+    def convert_doc(doc: str):
+        call(['soffice', '--headless', '--convert-to', 'docx', doc, '--outdir', f'{path.dirname(doc)}'], stdout=DEVNULL)
+        remove(doc)
+
     if f.endswith('.doc'):
-        call(['soffice', '--headless', '--convert-to', 'docx', f], stdout=DEVNULL)
-        remove(f)
+        convert_doc(f)
         f = f'{f}x'
+
+    print(f)
 
     return strip_doc(Document(f).paragraphs)
 
@@ -57,24 +62,57 @@ def get_court(lines: filter) -> str:
     return court
 
 
+def parse_int(number: str) -> int:
+    if number == '十':
+        return 10
+    elif number == '十万':
+        return 100000
+
+    def parse_int(x: str) -> str:
+        return {
+            '○': '0',
+            '零': '0',
+            '一': '1',
+            '二': '2',
+            '三': '3',
+            '四': '4',
+            '五': '5',
+            '六': '6',
+            '七': '7',
+            '八': '8',
+            '九': '9'
+        }.get(x, '')
+
+    return {
+               '十': 10,
+               '百': 100,
+               '千': 1000,
+               '万': 10000
+           }.get(number[-1], 1) * int(''.join(map(parse_int, number)))
+
+
 def parse_date(date: str) -> (int, int, int):
-    matched = re.match(r'(\d{4})年(\d{1,})月(\d{1,})日', date)
-    return int(matched.group(1)), int(matched.group(2)), int(matched.group(3))
+    matched = re.match(r'(.{4})年(.{1,})月(.{1,})日', date)
+    try:
+        return int(matched.group(1)), int(matched.group(2)), int(matched.group(3))
+    except ValueError:
+        return parse_int(matched.group(1)), parse_int(matched.group(2)), parse_int(matched.group(3))
 
 
 def get_accuseds(lines: filter) -> list:
-    next(lines)  # skip accuser
+    line = next(lines)
+    if '原告人' in line:  # skip accuser
+        line = next(lines)
 
     accuseds = []
-    line = next(lines)
     while line.startswith('被告人'):
-        matched = re.match(r'被告人(.+)，.，(.+)出', line)
-        accused_name = matched.group(1)
+        matched = re.match(r'被告人(.+)，(.+)出', line)
+        accused_name = matched.group(1).split('（')[0]
         accused_birthday = matched.group(2)
         accuseds.append((accused_name, accused_birthday))
 
         line = next(lines)
-        if line.startswith('辩护人'):  # skip attorney
+        if '辩护人' in line:  # skip attorney
             line = next(lines)
 
     return accuseds
@@ -105,7 +143,12 @@ def get_detail(lines: filter) -> (set, list, set):
 
     def get_drug(line: str, drugs: list):
         def split_int(text: str) -> (int, str):
-            return re.match(r"(\d+)(.+)", text).groups()
+            matched = re.match(r"([一二三四五六七八九十百千万]+|\d+)(.+)", text)
+            number = matched.group(1)
+            try:
+                return int(number), matched.group(2)
+            except ValueError:
+                return parse_int(number), matched.group(2)
 
         for drug in DRUGS:
             if drug in line:
@@ -117,8 +160,8 @@ def get_detail(lines: filter) -> (set, list, set):
                     amount_ = split_int(amount)
                     if amount_[1] == '克':
                         price_ = split_int(price)
-                        unit_price = f'{int(price_[0]) // int(amount_[0])}{price_[1]}/{amount_[1]}'
-                    drugs.append((price, amount, drug, unit_price))
+                        unit_price = f'{price_[0] // amount_[0]}{price_[1]}/{amount_[1]}'
+                    drugs.append((price, f'{amount_[0]}{amount_[1]}', drug, unit_price))
                 except AttributeError:
                     continue
 
@@ -162,28 +205,6 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
 
         return int(months)
 
-    def parse_forfeit(forfeit: str) -> int:
-        def parse_int(x: str) -> str:
-            return {
-                '零': '0',
-                '一': '1',
-                '二': '2',
-                '三': '3',
-                '四': '4',
-                '五': '5',
-                '六': '6',
-                '七': '7',
-                '八': '8',
-                '九': '9',
-            }.get(x, '')
-
-        return {
-                   '十': 10,
-                   '百': 100,
-                   '千': 1000,
-                   '万': 10000
-               }.get(forfeit[-1], 1) * int(''.join(map(parse_int, forfeit)))
-
     judgement = next(lines)
     infos = iter(judgement.split('，'))
 
@@ -195,21 +216,48 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
     forfeit = []
     prison_term = ('', '')
     for info in infos:
+        print(info)
         try:
-            matched = re.match(r'并处(罚金|没收财产)(人民币)?(.+)元', info)
+            matched = re.search(r'(罚金|没收财产)(人民币)?(.+)元', info)
             forfeit.append(matched.group(3))
             forfeit_type = matched.group(1)
         except AttributeError:
             try:
-                accusations.append(re.match(r'犯(.+罪)', info).group(1))
+                accusations.append(re.search(r'犯(.+罪)', info).group(1))
             except AttributeError:
                 try:
-                    matched = re.match(r'即自(.+)起至(.+)止', info)
+                    matched = re.search(r'即自(.+)起至(.+)止', info)
                     prison_term = (matched.group(1), matched.group(2))
                 except AttributeError:
                     continue
 
-    return name, accusations, parse_prison_term(*prison_term), sum(map(parse_forfeit, forfeit)), forfeit_type
+    if prison_term == ('', ''):
+        matched = re.search(r'即自(.+)起至(.+)止', next(lines))
+        prison_term = (matched.group(1), matched.group(2))
+
+    return name, accusations, parse_prison_term(*prison_term), sum(map(parse_int, forfeit)), forfeit_type
+
+
+def parse_doc(path: str):
+    lines = read_doc(path)
+    case_id = get_case_id(lines)
+    print(case_id)
+    court = get_court(lines)
+    print(court)
+    accuseds = get_accuseds(lines)
+    print(accuseds)
+    youngest_accused = get_youngest_accuseds(accuseds)
+    print(youngest_accused)
+    contact_infos, drugs, payments = get_detail(lines)
+    print(contact_infos, drugs, payments)
+    (
+        first_accused_name,
+        first_accused_accusation,
+        first_accused_prison_term,
+        first_accused_forfeit,
+        first_accused_forfeit_type
+    ) = get_first_accused_judgement(lines)
+    print(first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
 
 
 def test_case():
@@ -232,12 +280,3 @@ def test_case():
         first_accused_forfeit_type
     ) = get_first_accused_judgement(lines)
     print(first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
-
-
-if __name__ == '__main__':
-    test_case()
-
-    # for d in all_cases():
-    #     for d in d:
-    #         for f in d:
-    #             print(f)
