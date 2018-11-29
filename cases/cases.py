@@ -71,6 +71,7 @@ def parse_int(number: str) -> int:
     def parse_int(x: str) -> str:
         return {
             '○': '0',
+            '〇': '0',
             '零': '0',
             '一': '1',
             '二': '2',
@@ -100,16 +101,26 @@ def parse_date(date: str) -> (int, int, int):
 
 
 def get_accuseds(lines: filter) -> list:
+    from conf import ACCUSED_INFO
+
     line = next(lines)
     if '原告人' in line:  # skip accuser
         line = next(lines)
 
     accuseds = []
     while line.startswith('被告人'):
-        matched = re.match(r'被告人(.+)，(.+)出', line)
-        accused_name = matched.group(1).split('（')[0]
-        accused_birthday = matched.group(2)
-        accuseds.append((accused_name, accused_birthday))
+        matched = re.match(ACCUSED_INFO, line)
+
+        accused = {
+            'name': matched.group(1).split('（')[0],
+            'sexual': matched.group(2).replace('，', ''),
+            'birthday': matched.group(3),
+            'nation': matched.group(4),
+            'education': matched.group(5),
+            'occupation': matched.group(6),
+            'native_place': re.sub(r'(户籍地|家住|住)', '', matched.group(7))[0:-1]
+        }
+        accuseds.append(accused)
 
         line = next(lines)
         if '辩护人' in line:  # skip attorney
@@ -118,23 +129,22 @@ def get_accuseds(lines: filter) -> list:
     return accuseds
 
 
-def get_youngest_accuseds(accuseds: list) -> list:
+def get_min_birthday(accuseds: list) -> str:
     min_birthday = (0, 0, 0)
     for accused in accuseds:
-        birthday = parse_date(accused[1])
+        birthday = parse_date(accused['birthday'])
         for i in range(3):
             if birthday[i] > min_birthday[i]:
                 min_birthday = birthday
             elif birthday[i] < min_birthday[i]:
                 break
-    min_birthday = f'{min_birthday[0]}年{min_birthday[1]}月{min_birthday[2]}日'
 
-    return list(filter(lambda accused: accused[1] == min_birthday, accuseds))
+    return f'{min_birthday[0]}年{min_birthday[1]}月{min_birthday[2]}日'
 
 
 def get_detail(lines: filter) -> (set, list, set):
     # --- custom ---
-    from conf import CONTACT_INFOS, DRUGS, DRUGS_SOURCE, PAYMENTS, QUANTIFIER, SHIPPINGS
+    from conf import CONTACT_INFOS, DRUGS, DRUGS_SOURCE, PAYMENTS, QUANTIFIERS, SHIPPINGS
 
     def get_contact_info(line: str, contact_infos: set):
         for contact_info in CONTACT_INFOS:
@@ -142,28 +152,36 @@ def get_detail(lines: filter) -> (set, list, set):
                 contact_infos.add(contact_info)
 
     def get_drug(line: str, drugs: list):
-        def split_int(text: str) -> (int, str):
-            matched = re.match(r"([一二三四五六七八九十百千万]+|\d+)(.+)", text)
+        def split_float(text: str) -> (float, str):
+            matched = re.match(r"([一二三四五六七八九十百千万]+|\d+\.\d+|\d+)(.+)", text)
             number = matched.group(1)
             try:
-                return int(number), matched.group(2)
+                return float(number), matched.group(2)
             except ValueError:
-                return parse_int(number), matched.group(2)
+                return float(parse_int(number)), matched.group(2)
 
         for drug in DRUGS:
             if drug in line:
-                matched = re.search(QUANTIFIER, line)
-                try:
-                    price = matched.group(1)
-                    amount = matched.group(2)
-                    unit_price = ''
-                    amount_ = split_int(amount)
-                    if amount_[1] == '克':
-                        price_ = split_int(price)
-                        unit_price = f'{price_[0] // amount_[0]}{price_[1]}/{amount_[1]}'
-                    drugs.append((price, f'{amount_[0]}{amount_[1]}', drug, unit_price))
-                except AttributeError:
-                    continue
+                for quantifier in QUANTIFIERS:
+                    matched = re.search(quantifier, line)
+                    try:
+                        if '元' in matched.group(1):
+                            price = matched.group(1)
+                            amount = matched.group(2)
+                        else:
+                            price = matched.group(2)
+                            amount = matched.group(1)
+
+                        unit_price = ''
+                        amount_ = split_float(amount)
+                        if amount_[1] == '克':
+                            price_ = split_float(price)
+                            unit_price = f'{price_[0] // amount_[0]}{price_[1]}/{amount_[1]}'
+
+                        drugs.append((price, f'{amount_[0]}{amount_[1]}', drug, unit_price))
+                        break
+                    except AttributeError:
+                        continue
 
     def get_payment(line: str, payments: set):
         for payment in PAYMENTS:
@@ -182,7 +200,7 @@ def get_detail(lines: filter) -> (set, list, set):
 
     line = ''
     while not line.endswith('判决如下：'):
-        line = next(lines)
+        line = ''.join(next(lines).split())
 
         get_contact_info(line, contact_infos)
         get_drug(line, drugs)
@@ -205,18 +223,20 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
 
         return int(months)
 
-    judgement = next(lines)
+    judgement = ''
+    while '犯' not in judgement:
+        judgement = next(lines)
+
     infos = iter(judgement.split('，'))
 
     matched = re.search(r'被告人(.+)犯(.+)', next(infos))
     name = matched.group(1)
-
     accusations = [matched.group(2)]
+
     forfeit_type = ''
     forfeit = []
     prison_term = ('', '')
     for info in infos:
-        print(info)
         try:
             matched = re.search(r'(罚金|没收财产)(人民币)?(.+)元', info)
             forfeit.append(matched.group(3))
@@ -241,15 +261,17 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
 def parse_doc(path: str):
     lines = read_doc(path)
     case_id = get_case_id(lines)
-    print(case_id)
+    print('案号: ', case_id)
     court = get_court(lines)
-    print(court)
+    print('法院: ', court)
     accuseds = get_accuseds(lines)
-    print(accuseds)
-    youngest_accused = get_youngest_accuseds(accuseds)
-    print(youngest_accused)
+    print('被告人: ',accuseds)
+    min_birthday = get_min_birthday(accuseds)
+    print('最小出生日期: ', min_birthday)
     contact_infos, drugs, payments = get_detail(lines)
-    print(contact_infos, drugs, payments)
+    print('联系方式: ', contact_infos)
+    print('毒品: ', drugs)
+    print('支付方式: ', payments)
     (
         first_accused_name,
         first_accused_accusation,
@@ -257,21 +279,23 @@ def parse_doc(path: str):
         first_accused_forfeit,
         first_accused_forfeit_type
     ) = get_first_accused_judgement(lines)
-    print(first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
+    print('第一被告人: ', first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
 
 
-def test_case():
-    lines = read_doc('（2018）浙0281刑初30号.docx')
+def test_case(path: str):
+    lines = read_doc(path)
     case_id = get_case_id(lines)
-    print(case_id)
+    # print('案号: ', case_id)
     court = get_court(lines)
-    print(court)
+    # print('法院: ', court)
     accuseds = get_accuseds(lines)
-    print(accuseds)
-    youngest_accused = get_youngest_accuseds(accuseds)
-    print(youngest_accused)
+    # print('被告人: ',accuseds)
+    min_birthday = get_min_birthday(accuseds)
+    # print('最小出生日期: ', min_birthday)
     contact_infos, drugs, payments = get_detail(lines)
-    print(contact_infos, drugs, payments)
+    # print('联系方式: ', contact_infos)
+    # print('毒品: ', drugs)
+    # print('支付方式: ', payments)
     (
         first_accused_name,
         first_accused_accusation,
@@ -279,4 +303,5 @@ def test_case():
         first_accused_forfeit,
         first_accused_forfeit_type
     ) = get_first_accused_judgement(lines)
-    print(first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
+    print('第一被告人: ', first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
+    input()

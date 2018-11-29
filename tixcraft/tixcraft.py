@@ -127,7 +127,17 @@ class Tixcraft:
             form = etree.HTML(resp.text).xpath('//form')[0]
             question = ''.join([text.strip() for text in form.itertext()])
             csrf_token = form.xpath('./input')[0].attrib['value']
-            check_code = CARD_NO if '信用卡' in question else input(f'        -> {question}: ')
+
+            check_code = CARD_NO if '信用卡' in question else None
+            if check_code is None:
+                for check_code_ in CHECK_CODES:
+                    try:
+                        check_code = re.match(rf'({check_code_})', question, re.I).group(1)
+                    except AttributeError:
+                        continue
+
+                if check_code is None:
+                    check_code = input(f'        -> {question}: ')
 
             self.verify_code(event_id, csrf_token, check_code)
 
