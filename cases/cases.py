@@ -32,7 +32,10 @@ def read_doc(f: str) -> filter:
     from docx import Document
 
     def strip_doc(doc: list) -> filter:
-        return filter(lambda _: _, map(lambda line: ''.join(line.text.split()), doc))
+        # --- std ---
+        from unicodedata import normalize
+
+        return filter(lambda _: _, map(lambda line: normalize('NFKC', ''.join(line.text.split())), doc))
 
     def convert_doc(doc: str) -> str:
         call(['soffice', '--headless', '--convert-to', 'docx', doc, '--outdir', f'{path.dirname(doc)}'], stdout=DEVNULL)
@@ -137,17 +140,17 @@ def get_accuseds(lines: filter) -> list:
 
     accuseds = []
     while line.startswith('被告人'):
-        sex = re.search(r'([男女])(?:,|, |，)', line)
+        sex = re.search(r'([男女]),', line)
         sex = '' if sex is None else sex.group(1)
 
         matched = re.search(
-            r'(?:,|, |，)([^,，]+?[族|人])(?:,|, |，).*?(文盲|小学|初中|中专|高中|专科|大专|大学|).*?(?:,|, |，)(?:([^家住户籍所在地为]+?)(?:,|, |，))?(?:住|家住|租住|户籍地|户籍所在地|户籍所在地为)(.+?)(?:,|, |，|。)',
+            r',([^,]+?[族|人]),.*?(文盲|小学|初中|中专|高中|专科|大专|大学|).*?,(?:([^家住户籍所在地为]+?),)?(?:住|家住|租住|户籍地|户籍所在地|户籍所在地为)(.+?)[,。]',
             line
         )
         occupation = matched.group(3)
 
         accuseds.append({
-            'name': re.match(r'被告人(.+?)(?:（.+?）)?(?:,|, |，)', line).group(1),
+            'name': re.match(r'被告人(.+?)(?:（.+?）)?,', line).group(1),
             'sex': sex,
             'birthday': [int(birthday) for birthday in re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日[出于]', line).groups()],
             'nation': matched.group(1),
@@ -199,7 +202,7 @@ def get_detail(lines: filter) -> (set, list, set):
                 if drug not in drugs:
                     drugs[drug] = set()
 
-                matched = re.search(r'(\d+\.\d+|\d+)克，每克(d+)元', line)
+                matched = re.search(r'(\d+\.\d+|\d+)克,每克(d+)元', line)
                 if matched is None:
                     for quantifier in QUANTIFIERS:
                         matched = re.search(quantifier, line)
@@ -241,7 +244,7 @@ def get_detail(lines: filter) -> (set, list, set):
     # shippings = set()
 
     line = ''
-    while not line.endswith('判决如下：'):
+    while not line.endswith('判决如下:'):
         try:
             line = next(lines)
         except StopIteration:
@@ -278,7 +281,7 @@ def get_first_accused_judgement(lines: filter) -> (str, list, str, str, int):
         except StopIteration:
             return '', [], '', '', 0
 
-    infos = iter(judgement.split('，'))
+    infos = iter(judgement.split(','))
 
     matched = re.search(r'被告人(.+)犯(.+)', next(infos))
     name = matched.group(1)
