@@ -26,24 +26,26 @@ def all_cases(path: str = '.') -> map:
 
 def read_doc(f: str) -> filter:
     # --- std ---
-    from os import remove, rename, path
+    from os import remove, path
     from subprocess import DEVNULL, call
     # --- external ---
     from docx import Document
 
     def strip_doc(doc: list) -> filter:
-        return filter(lambda _: _, map(lambda line: line.text.strip(), doc))
+        return filter(lambda _: _, map(lambda line: ''.join(line.text.split()), doc))
 
-    def convert_doc(doc: str):
+    def convert_doc(doc: str) -> str:
         call(['soffice', '--headless', '--convert-to', 'docx', doc, '--outdir', f'{path.dirname(doc)}'], stdout=DEVNULL)
-        remove(doc)
+
+        if path.isfile(f'{doc}x'):
+            remove(doc)
+        return f'{doc}x'
 
     if f.endswith('DOC'):
         f = f'{f[:-3]}doc'
 
     if f.endswith('doc'):
-        convert_doc(f)
-        f = f'{f}x'
+        f = convert_doc(f)
 
     print(f)
 
@@ -68,11 +70,24 @@ def get_court(lines: filter) -> str:
 def parse_int(number: str) -> int:
     try:
         return int(number)
+    except TypeError:
+        return 0
     except ValueError:
-        if number == '十':
-            return 10
-        elif number == '十万':
-            return 100000
+        start_with_ten = {
+            '十': 10,
+            '十一': 11,
+            '十二': 12,
+            '十三': 13,
+            '十四': 14,
+            '十五': 15,
+            '十六': 16,
+            '十七': 17,
+            '十八': 18,
+            '十九': 19,
+            '十万': 100000,
+        }
+        if number in start_with_ten:
+            return start_with_ten[number]
 
         def parse_int(x: str) -> str:
             return {
@@ -96,7 +111,7 @@ def parse_int(number: str) -> int:
                    '百': 100,
                    '千': 1000,
                    '万': 10000
-               }.get(number[-1], 1) * int(''.join(map(parse_int, number)))
+               }.get(number[-1], 1) * int((''.join(map(parse_int, number))))
 
 
 def parse_date(date: str) -> (int, int, int):
@@ -108,7 +123,7 @@ def parse_date(date: str) -> (int, int, int):
 
 
 def get_accuseds(lines: filter) -> list:
-    from conf import ACCUSED_INFOS
+    from conf import NATIONS_EDUCATIONS_OCCUPATIONS_NATIVES_PLACES
 
     line = next(lines)
     if '原告人' in line:  # skip accuser
@@ -116,31 +131,21 @@ def get_accuseds(lines: filter) -> list:
 
     accuseds = []
     while line.startswith('被告人'):
-        for accused_info in ACCUSED_INFOS:
-            try:
-                matched = re.match(accused_info, line)
+        sex = re.search(r'([男女])(?:,|, |，)', line)
+        sex = '' if sex is None else sex.group(1)
 
-                nation = matched.group(4)
-                if '族' in nation:
-                    birthday = matched.group(3)
-                else:
-                    nation = matched.group(3)
-                    birthday = matched.group(4)
+        matched = re.search(NATIONS_EDUCATIONS_OCCUPATIONS_NATIVES_PLACES, line)
+        occupation = matched.group(3)
 
-                accused = {
-                    'name': matched.group(1).split('（')[0],
-                    'sexual': matched.group(2).replace('，', ''),
-                    'birthday': birthday,
-                    'nation': nation,
-                    'education': matched.group(5),
-                    'occupation': matched.group(6),
-                    'native_place': matched.group(7)
-                }
-                accuseds.append(accused)
-
-                break
-            except AttributeError:
-                continue
+        accuseds.append({
+            'name': re.match(r'被告人(.+?)(?:（.+?）)?(?:,|, |，)', line).group(1),
+            'sex': sex,
+            'birthday': [int(birthday) for birthday in re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日出生', line).groups()],
+            'nation': matched.group(1),
+            'education': matched.group(2),
+            'occupation': '' if occupation is None else occupation,
+            'native_place': matched.group(4)
+        })
 
         line = next(lines)
         if '辩护人' in line:  # skip attorney
@@ -152,7 +157,7 @@ def get_accuseds(lines: filter) -> list:
 def get_min_birthday(accuseds: list) -> str:
     min_birthday = (0, 0, 0)
     for accused in accuseds:
-        birthday = parse_date(accused['birthday'])
+        birthday = accused['birthday']
         for i in range(3):
             if birthday[i] > min_birthday[i]:
                 min_birthday = birthday
@@ -171,7 +176,7 @@ def get_detail(lines: filter) -> (set, list, set):
             if contact_info in line:
                 contact_infos.add(contact_info)
 
-    def get_drug(line: str, drugs: list):
+    def get_drug(line: str, drugs: dict):
         def split_float(text: str) -> (float, str):
             matched = re.match(r"([一二三四五六七八九十百千万]+|\d+\.\d+|\d+)(.+)", text)
             number = matched.group(1)
@@ -182,16 +187,16 @@ def get_detail(lines: filter) -> (set, list, set):
 
         for drug in DRUGS:
             if drug in line:
-                try:
-                    matched = re.search(r'(\d+|\d+\.\d+)克，每克(d+)元', line)
-                    amount = float(matched.group(1))
-                    price_per_gram = float(matched.group(2))
-                    drugs.append((drug, amount * price_per_gram, f'{amount}克', f'{price_per_gram}元/克'))
-                    return
-                except AttributeError:
+                if drug not in drugs:
+                    drugs[drug] = set()
+
+                matched = re.search(r'(\d+|\d+\.\d+)克，每克(d+)元', line)
+                if matched is None:
                     for quantifier in QUANTIFIERS:
                         matched = re.search(quantifier, line)
-                        try:
+                        if matched is None:
+                            return
+                        else:
                             if '元' in matched.group(1):
                                 price = matched.group(1)
                                 amount = matched.group(2)
@@ -205,10 +210,11 @@ def get_detail(lines: filter) -> (set, list, set):
                                 price_ = split_float(price)
                                 unit_price = f'{round(price_[0] / amount_[0], 1)}{price_[1]}/{amount_[1]}'
 
-                            drugs.append((drug, price, f'{amount_[0]}{amount_[1]}', unit_price))
-                            return
-                        except AttributeError:
-                            drugs.append((drug, '不详', '不详', ''))
+                            return drugs[drug].add((price, f'{amount_[0]}{amount_[1]}', unit_price))
+                else:
+                    amount = float(matched.group(1))
+                    price_per_gram = float(matched.group(2))
+                    return drugs[drug].add((amount * price_per_gram, f'{amount}克', f'{price_per_gram}元/克'))
 
     def get_payment(line: str, payments: set):
         for payment in PAYMENTS:
@@ -221,13 +227,13 @@ def get_detail(lines: filter) -> (set, list, set):
                 shippings.add(shipping)
 
     contact_infos = set()
-    drugs = []
+    drugs = {}
     payments = set()
     # shippings = set()
 
     line = ''
     while not line.endswith('判决如下：'):
-        line = ''.join(next(lines).split())
+        line = next(lines)
 
         get_contact_info(line, contact_infos)
         get_drug(line, drugs)
@@ -238,6 +244,9 @@ def get_detail(lines: filter) -> (set, list, set):
 
 
 def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
+    # --- custom ---
+    from conf import PRISON_TERM
+
     def parse_prison_term(from_: str, to: str) -> int:
         # --- std ---
         from datetime import datetime
@@ -265,31 +274,25 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
     prison_term = ('', '')
     reserve_prison_term = ('', '')
     for info in infos:
-        info = ''.join(info.split())
+        matched_forfeit = re.search(r'(罚金|没收财产)(?:人民币)?(.+?)元', info)
+        matched_accusation = re.search(r'犯(.+?罪)', info)
+        matched_prison_term = re.search(PRISON_TERM, info)
+        matched_reserve_prison_term = re.search(r'[刑役制](?:(.+?)年)?(?:(.+?)个月)?', info)
 
-        try:
-            matched = re.search(r'(罚金|没收财产)(人民币)?(.+)元', info)
-            forfeit.append(matched.group(3))
-            forfeit_type = matched.group(1)
-        except AttributeError:
-            try:
-                accusations.append(re.search(r'犯(.+罪)', info).group(1))
-            except AttributeError:
-                try:
-                    matched = re.search(r'即自(.+)起至(.+)止', info)
-                    prison_term = (matched.group(1), matched.group(2))
-                    matched = re.match(r'刑(.+)年(.+)月', info)
-                    reserve_prison_term = (matched.group(1), matched.group(2))
-                except AttributeError:
-                    continue
+        if matched_forfeit is not None:
+            forfeit_type = matched_forfeit.group(1)
+            forfeit.append(matched_forfeit.group(2))
+        elif matched_accusation is not None:
+            accusations.append(matched_accusation.group(1))
+        elif matched_prison_term is not None:
+            prison_term = parse_prison_term(matched_prison_term.group(1), matched_prison_term.group(2))
+        elif matched_reserve_prison_term is not None:
+            reserve_prison_term = (matched_reserve_prison_term.group(1), matched_reserve_prison_term.group(2))
 
     if prison_term == ('', ''):
-        try:
-            matched = re.search(r'即自(.+)起至(.+)止', next(lines))
-            prison_term = (matched.group(1), matched.group(2))
-            prison_term = parse_prison_term(*prison_term)
-        except AttributeError:
-            prison_term = parse_int(reserve_prison_term[0]) * 12 + parse_int(reserve_prison_term[1])
+        matched = re.search(PRISON_TERM, next(lines))
+        prison_term = parse_int(reserve_prison_term[0]) * 12 + parse_int(reserve_prison_term[1]) \
+            if matched is None else parse_prison_term(matched.group(1), matched.group(2))
 
     return name, accusations, prison_term, sum(map(parse_int, forfeit)), forfeit_type
 
