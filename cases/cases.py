@@ -208,7 +208,7 @@ def get_detail(lines: filter) -> (set, list, set):
                             drugs.append((drug, price, f'{amount_[0]}{amount_[1]}', unit_price))
                             return
                         except AttributeError:
-                            continue
+                            drugs.append((drug, '不详', '不详', ''))
 
     def get_payment(line: str, payments: set):
         for payment in PAYMENTS:
@@ -263,6 +263,7 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
     forfeit_type = ''
     forfeit = []
     prison_term = ('', '')
+    reserve_prison_term = ('', '')
     for info in infos:
         info = ''.join(info.split())
 
@@ -277,14 +278,20 @@ def get_first_accused_judgement(lines: filter) -> (str, list, (str, str), int):
                 try:
                     matched = re.search(r'即自(.+)起至(.+)止', info)
                     prison_term = (matched.group(1), matched.group(2))
+                    matched = re.match(r'刑(.+)年(.+)月', info)
+                    reserve_prison_term = (matched.group(1), matched.group(2))
                 except AttributeError:
                     continue
 
     if prison_term == ('', ''):
-        matched = re.search(r'即自(.+)起至(.+)止', next(lines))
-        prison_term = (matched.group(1), matched.group(2))
+        try:
+            matched = re.search(r'即自(.+)起至(.+)止', next(lines))
+            prison_term = (matched.group(1), matched.group(2))
+            prison_term = parse_prison_term(*prison_term)
+        except AttributeError:
+            prison_term = parse_int(reserve_prison_term[0]) * 12 + parse_int(reserve_prison_term[1])
 
-    return name, accusations, parse_prison_term(*prison_term), sum(map(parse_int, forfeit)), forfeit_type
+    return name, accusations, prison_term, sum(map(parse_int, forfeit)), forfeit_type
 
 
 def parse_doc(path: str):
