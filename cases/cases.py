@@ -177,9 +177,9 @@ def get_accuseds(lines: filter) -> list:
             #                                                            fuck l990
             'birthday': '' if birthday is None else [int(birthday.replace('l', '1')) for birthday in birthday.groups()],
             'nation': nation,
-            'education': matched.group(1),
-            'occupation': matched.group(2),
-            'native_place': matched.group(3)
+            'education': '' if matched.group(1) is None else matched.group(1),
+            'occupation': '' if matched.group(2) is None else matched.group(2),
+            'native_place': '' if matched.group(3) is None else matched.group(3)
         })
 
         line = next(lines)
@@ -243,16 +243,17 @@ def get_detail(lines: filter) -> (set, dict, set, set):
                         amount_ = split_float(amount)
                         if amount_[1] in '克粒':
                             price_ = split_float(price)
+                            unit_price = round(price_[0] / amount_[0], 1)
                             #  wrong data
-                            if price_[0] < 100.:
+                            if unit_price < 100.:
                                 continue
-                            unit_price = f'{round(price_[0] / amount_[0], 1)}{price_[1]}/{amount_[1]}'
+                            unit_price = f'{unit_price}{price_[1]}/{amount_[1]}'
 
-                        return drugs[drug].add((price, f'{amount_[0]}{amount_[1]}', unit_price))
+                        return drugs[drug].add((str(price), f'{amount_[0]}{amount_[1]}', unit_price))
                 else:
                     amount = float(matched.group(1))
                     price_per_gram = float(matched.group(2))
-                    return drugs[drug].add((amount * price_per_gram, f'{amount}克', f'{price_per_gram}元/克'))
+                    return drugs[drug].add((str(amount * price_per_gram), f'{amount}克', f'{price_per_gram}元/克'))
 
     def get_payment(line: str, payments: set):
         for payment in PAYMENTS:
@@ -420,15 +421,16 @@ def parse_doc(path: str, save_to_csv: (bool, str) = (False, '')):
             w.writerow([
                 court,
                 case_id,
+                ', '.join(map(lambda accused: accused['name'], accuseds)),
                 first_accused.get('name', ''),
                 first_accused.get('sex', ''),
-                first_accused.get('birthday', ''),
+                f'{first_accused["birthday"][0]}年{first_accused["birthday"][1]}月{first_accused["birthday"][2]}日' if 'birthday' in first_accused else '',
                 first_accused.get('nation', ''),
                 first_accused.get('education', ''),
                 first_accused.get('occupation', ''),
                 first_accused.get('native_place', ''),
                 min_birthday,
-                '; '.join([f'{kind}: {", ".join(kind)}' for kind, detail in drugs.items()]),
+                '。'.join(map(lambda drug: f'{drug[0]}: {"; ".join(map(lambda detail: ", ".join(detail), drug[1]))}', drugs.items())),
                 ', '.join(contact_infos),
                 ', '.join(payments),
                 ', '.join(shippings)
