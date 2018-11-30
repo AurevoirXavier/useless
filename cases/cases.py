@@ -21,7 +21,7 @@ def all_cases(path: str = '.') -> map:
     def filter_dir(fn: callable, parent: str) -> filter:
         return filter(fn, map(lambda descendant: f'{parent}/{descendant}', listdir(parent)))
 
-    return map(lambda d: map(lambda f: filter_dir(is_file, f), filter_dir(is_dir, d)), filter(is_dir, listdir(path)))
+    return map(lambda d: (d, map(lambda f: filter_dir(is_file, f), filter_dir(is_dir, d))), filter(is_dir, listdir(path)))
 
 
 def read_doc(f: str) -> filter:
@@ -153,7 +153,7 @@ def get_accuseds(lines: filter) -> list:
                 return accuseds
 
         name = re.match(r'被告人(.+?)(?:\(.+?\))?,', line).group(1)
-        #  fuck some doc
+        #  fuck special doc
         if ',' in name:
             raise ValueError
 
@@ -202,7 +202,7 @@ def get_min_birthday(accuseds: list) -> str:
     return f'{min_birthday[0]}年{min_birthday[1]}月{min_birthday[2]}日'
 
 
-def get_detail(lines: filter) -> (set, list, set, set):
+def get_detail(lines: filter) -> (set, dict, set, set):
     # --- custom ---
     from conf import CONTACT_INFOS, DRUGS, DRUGS_SOURCE, PAYMENTS, QUANTIFIERS, SHIPPINGS
 
@@ -274,7 +274,7 @@ def get_detail(lines: filter) -> (set, list, set, set):
         try:
             line = next(lines)
         except StopIteration:
-            return set(), [], set(), set()
+            return set(), {}, set(), set()
 
         get_contact_info(line, contact_infos)
         get_drug(line, drugs)
@@ -284,7 +284,7 @@ def get_detail(lines: filter) -> (set, list, set, set):
     return contact_infos, drugs, payments, shippings
 
 
-def get_first_accused_judgement(lines: filter, accuseds: list) -> (str, list, str, str, int):
+def get_first_accused_judgement(lines: filter, accuseds: list) -> (list, str, str, int):
     # --- custom ---
     from conf import PRISON_TERM
 
@@ -313,12 +313,12 @@ def get_first_accused_judgement(lines: filter, accuseds: list) -> (str, list, st
         try:
             judgement = next(lines)
         except StopIteration:
-            return '', [], '', '', 0
+            return [], '', '', 0
 
     infos = iter(judgement.split(','))
 
     info = next(infos)
-    matched = re.search(r'被告人(.+?)犯(.+?罪)', info)
+    matched = re.search(r'被告人.+?犯(.+?罪)', info)
     if matched is None:
         for accused in accuseds:
             if accused['name'] in info:
@@ -326,8 +326,7 @@ def get_first_accused_judgement(lines: filter, accuseds: list) -> (str, list, st
                 accusations = [info.split(name)[1]]
                 break
     else:
-        name = matched.group(1)
-        accusations = [matched.group(2)]
+        accusations = [matched.group(1)]
 
     forfeit_type = ''
     forfeit = []
@@ -364,10 +363,10 @@ def get_first_accused_judgement(lines: filter, accuseds: list) -> (str, list, st
             prison_term = 0 if matched.groups() == ('年月日', '年月日') \
                 else parse_prison_term(matched.group(1), matched.group(2))
 
-    return name, accusations, prison_term, sum(map(parse_float, forfeit)), forfeit_type
+    return accusations, prison_term, sum(map(parse_float, forfeit)), forfeit_type
 
 
-def parse_doc(path: str):
+def parse_doc(path: str, save_to_csv: (bool, str) = (False, '')):
     try:
         lines = read_doc(path)
     except ValueError:
@@ -397,20 +396,43 @@ def parse_doc(path: str):
     min_birthday = get_min_birthday(accuseds)
     print('最小出生日期: ', min_birthday)
 
-    contact_infos, drugs, payments, shipping = get_detail(lines)
+    contact_infos, drugs, payments, shippings = get_detail(lines)
     print('联系方式: ', contact_infos)
     print('毒品: ', drugs)
     print('支付方式: ', payments)
-    print('运输方式: ', shipping)
+    print('运输方式: ', shippings)
 
+    first_accused = accuseds[0] if accuseds else {}
     (
-        first_accused_name,
         first_accused_accusation,
         first_accused_prison_term,
         first_accused_forfeit,
         first_accused_forfeit_type
     ) = get_first_accused_judgement(lines, accuseds)
-    print('第一被告人: ', first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
+    print('第一被告人: ', first_accused, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
+
+    if save_to_csv[0]:
+        # --- std ---
+        from csv import writer
+
+        with open(save_to_csv[1], 'a', encoding='utf-8-sig') as f:
+            w = writer(f)
+            w.writerow([
+                court,
+                case_id,
+                first_accused.get('name', ''),
+                first_accused.get('sex', ''),
+                first_accused.get('birthday', ''),
+                first_accused.get('nation', ''),
+                first_accused.get('education', ''),
+                first_accused.get('occupation', ''),
+                first_accused.get('native_place', ''),
+                min_birthday,
+                '; '.join([f'{kind}: {", ".join(kind)}' for kind, detail in drugs.items()]),
+                ', '.join(contact_infos),
+                ', '.join(payments),
+                ', '.join(shippings)
+            ])
 
 
 def test_case(path: str):
@@ -430,7 +452,7 @@ def test_case(path: str):
 
     case_id = next(lines)
     print('案号: ', case_id)
-
+    #  fuck special doc
     if case_id == '(简易程序独任审判案件专用)':
         return
 
