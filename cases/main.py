@@ -6,7 +6,7 @@ from pickle import dump, load
 from cases import all_cases, parse_doc, test_case
 
 if __name__ == '__main__':
-    test_case('2017年走私、贩卖、运输、制造毒品罪/宁波/（2017）浙0282刑初1425号.docx')
+    test_case('2017年走私、贩卖、运输、制造毒品罪/衢州/（2016）浙0802刑初00165号.docx')
 
     read_cases = set()
     if isfile('read_cases'):
