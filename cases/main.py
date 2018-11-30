@@ -1,15 +1,15 @@
 # --- std ---
-from os.path import isfile
+from os import remove, path
 from pickle import dump, load
 
 # --- custom ---
 from cases import all_cases, parse_doc, test_case
 
 if __name__ == '__main__':
-    test_case('2017年走私、贩卖、运输、制造毒品罪/衢州/（2016）浙0802刑初00165号.docx')
+    # test_case('2017年走私、贩卖、运输、制造毒品罪/宁波/（2017）浙0282刑初453号.docx')
 
     read_cases = set()
-    if isfile('read_cases'):
+    if path.isfile('read_cases'):
         with open('read_cases', 'rb') as f:
             read_cases = load(f)
 
@@ -24,3 +24,5 @@ if __name__ == '__main__':
                 read_cases.add(case)
                 with open('read_cases', 'wb') as f:
                     dump(read_cases, f)
+
+    remove('read_cases')

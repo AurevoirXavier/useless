@@ -51,8 +51,10 @@ def read_doc(f: str) -> filter:
         f = convert_doc(f)
 
     print(f)
-
-    return strip_doc(Document(f).paragraphs)
+    if f.endswith('docx'):
+        return strip_doc(Document(f).paragraphs)
+    else:
+        raise ValueError
 
 
 def skip_special_type(special_type: str) -> bool:
@@ -63,14 +65,17 @@ def skip_special_type(special_type: str) -> bool:
 
 
 def get_court(lines: filter) -> str:
-    court = next(lines)
+    court = ''
+    while not court.endswith('人民法院'):
+        court = next(lines)
+
     court = re.match(r'(.+)人民法院', court).group(1)
     court = re.sub(r'.+省', '', court)
 
     return court
 
 
-def parse_int(number: str) -> float:
+def parse_float(number: str) -> float:
     def parse_int(x: str) -> str:
         return {
             '0': '0',
@@ -79,6 +84,7 @@ def parse_int(number: str) -> float:
             '零': '0',
             '一': '1',
             '二': '2',
+            '两': '2',
             '三': '3',
             '四': '4',
             '五': '5',
@@ -102,37 +108,39 @@ def parse_int(number: str) -> float:
         return 0.
     except ValueError:
         start_with_ten = {
-            '十': 10,
-            '十一': 11,
-            '十二': 12,
-            '十三': 13,
-            '十四': 14,
-            '十五': 15,
-            '十六': 16,
-            '十七': 17,
-            '十八': 18,
-            '十九': 19,
-            '十万': 100000,
+            '十': 10.,
+            '十一': 11.,
+            '十二': 12.,
+            '十三': 13.,
+            '十四': 14.,
+            '十五': 15.,
+            '十六': 16.,
+            '十七': 17.,
+            '十八': 18.,
+            '十九': 19.,
+            '十万': 100000.,
         }
         if number in start_with_ten:
             return start_with_ten[number]
 
-        matched = re.match(r'(\d+\.\d+|\d+)万', number)
+        matched = re.match(r'(\d+\.\d+|\d+)([十百千万])', number)
         if matched is not None:
-            return float(matched.group(1)) * 10000.
+            return float(matched.group(1)) * parse_quantifier(matched.group(2))
 
         return parse_quantifier(number[-1]) * float((''.join(map(parse_int, number))))
 
 
 def parse_date(date: str) -> (int, int, int):
-    matched = re.match(r'(.{4})年(.{1,})月(.{1,})日', date)
+    matched = re.search(r'(.{4})年(.{1,})月([一二三四五六七八九十\d]{1,})日?', date)
     try:
         return int(matched.group(1)), int(matched.group(2)), int(matched.group(3))
     except ValueError:
-        return parse_int(matched.group(1)), parse_int(matched.group(2)), parse_int(matched.group(3))
+        return int(parse_float(matched.group(1))), int(parse_float(matched.group(2))), int(parse_float(matched.group(3)))
 
 
 def get_accuseds(lines: filter) -> list:
+    from conf import EDUCATIONS, RESIDENCE
+
     next(lines)  # skip court
     line = next(lines)
     if '原告人' in line:  # skip accuser
@@ -140,23 +148,38 @@ def get_accuseds(lines: filter) -> list:
 
     accuseds = []
     while line.startswith('被告人'):
+        for accused in accuseds:
+            if accused['name'] in line:
+                return accuseds
+
+        name = re.match(r'被告人(.+?)(?:\(.+?\))?,', line).group(1)
+        #  fuck some doc
+        if ',' in name:
+            raise ValueError
+
         sex = re.search(r'([男女]),', line)
         sex = '' if sex is None else sex.group(1)
+        nation = re.search(r',([^,]+?族),', line)
+        nation = '' if nation is None else nation.group(1)
+        birthday = re.search(r'([l\d]{4})年([l\d]{1,2})月([l\d]{1,2})日?[出生于]?', line)
 
-        matched = re.search(
-            r',([^,]+?[族|人]),.*?(文盲|小学|初中|中专|高中|专科|大专|大学|).*?,(?:([^家住户籍所在地为]+?),)?(?:住|家住|租住|户籍地|户籍所在地|户籍所在地为)(.+?)[,。]',
-            line
-        )
-        occupation = matched.group(3)
+        for pattern in [
+            rf'(?:.+人,|.+人.+族,)?(?:.*?({EDUCATIONS}).*?,)?(?:.+人.+族,)?(?:([^\d家住户籍所在地为]+?),)?(?:.+人,)?(?:{RESIDENCE})([^。]+?[省县市镇村].+?)?[(;,。]',
+            rf'(?:.+人,|.+人.+族,)?(?:.*?({EDUCATIONS}).*?,)?(?:.+人.+族,)?(?:([^\d家住户籍所在地为]+?),)?(?:.+人,)?([^。]+?[省县市镇村].+?)?[(;,。]'
+        ]:
+            matched = re.search(pattern, line)
+            if matched is not None:
+                break
 
         accuseds.append({
-            'name': re.match(r'被告人(.+?)(?:（.+?）)?,', line).group(1),
+            'name': name,
             'sex': sex,
-            'birthday': [int(birthday) for birthday in re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日[出于]', line).groups()],
-            'nation': matched.group(1),
-            'education': matched.group(2),
-            'occupation': '' if occupation is None else occupation,
-            'native_place': matched.group(4)
+            #                                                            fuck l990
+            'birthday': '' if birthday is None else [int(birthday.replace('l', '1')) for birthday in birthday.groups()],
+            'nation': nation,
+            'education': matched.group(1),
+            'occupation': matched.group(2),
+            'native_place': matched.group(3)
         })
 
         line = next(lines)
@@ -179,7 +202,7 @@ def get_min_birthday(accuseds: list) -> str:
     return f'{min_birthday[0]}年{min_birthday[1]}月{min_birthday[2]}日'
 
 
-def get_detail(lines: filter) -> (set, list, set):
+def get_detail(lines: filter) -> (set, list, set, set):
     # --- custom ---
     from conf import CONTACT_INFOS, DRUGS, DRUGS_SOURCE, PAYMENTS, QUANTIFIERS, SHIPPINGS
 
@@ -195,7 +218,7 @@ def get_detail(lines: filter) -> (set, list, set):
             try:
                 return float(number), matched.group(2)
             except ValueError:
-                return parse_int(number), matched.group(2)
+                return parse_float(number), matched.group(2)
 
         for drug in DRUGS:
             if drug in line:
@@ -207,7 +230,7 @@ def get_detail(lines: filter) -> (set, list, set):
                     for quantifier in QUANTIFIERS:
                         matched = re.search(quantifier, line)
                         if matched is None:
-                            return
+                            continue
 
                         if '元' in matched.group(1):
                             price = matched.group(1)
@@ -220,6 +243,9 @@ def get_detail(lines: filter) -> (set, list, set):
                         amount_ = split_float(amount)
                         if amount_[1] in '克粒':
                             price_ = split_float(price)
+                            #  wrong data
+                            if price_[0] < 100.:
+                                continue
                             unit_price = f'{round(price_[0] / amount_[0], 1)}{price_[1]}/{amount_[1]}'
 
                         return drugs[drug].add((price, f'{amount_[0]}{amount_[1]}', unit_price))
@@ -231,34 +257,34 @@ def get_detail(lines: filter) -> (set, list, set):
     def get_payment(line: str, payments: set):
         for payment in PAYMENTS:
             if payment in line:
-                payments.add(payment)
+                return payments.add(payment)
 
     def get_shipping(line: str, shippings: set):
         for shipping in SHIPPINGS:
             if shipping in line:
-                shippings.add(shipping)
+                return shippings.add(shipping)
 
     contact_infos = set()
     drugs = {}
     payments = set()
-    # shippings = set()
+    shippings = set()
 
     line = ''
     while not line.endswith('判决如下:'):
         try:
             line = next(lines)
         except StopIteration:
-            return set(), [], set()
+            return set(), [], set(), set()
 
         get_contact_info(line, contact_infos)
         get_drug(line, drugs)
         get_payment(line, payments)
-        # get_shipping(line, shippings)
+        get_shipping(line, shippings)
 
-    return contact_infos, drugs, payments
+    return contact_infos, drugs, payments, shippings
 
 
-def get_first_accused_judgement(lines: filter) -> (str, list, str, str, int):
+def get_first_accused_judgement(lines: filter, accuseds: list) -> (str, list, str, str, int):
     # --- custom ---
     from conf import PRISON_TERM
 
@@ -268,8 +294,16 @@ def get_first_accused_judgement(lines: filter) -> (str, list, str, str, int):
         # --- external ---
         from dateutil import rrule
 
-        from_ = datetime(*parse_date(from_))
-        to = datetime(*parse_date(to))
+        try:
+            from_ = datetime(*parse_date(from_))
+
+            year, month, day = parse_date(to)
+            #  fuck 11/31
+            if day == 31:
+                day -= 1
+            to = datetime(year, month, day)
+        except ValueError:
+            raise ValueError
         months = rrule.rrule(rrule.MONTHLY, dtstart=from_, until=to).count()
 
         return int(months)
@@ -283,19 +317,29 @@ def get_first_accused_judgement(lines: filter) -> (str, list, str, str, int):
 
     infos = iter(judgement.split(','))
 
-    matched = re.search(r'被告人(.+)犯(.+)', next(infos))
-    name = matched.group(1)
-    accusations = [matched.group(2)]
+    info = next(infos)
+    matched = re.search(r'被告人(.+?)犯(.+?罪)', info)
+    if matched is None:
+        for accused in accuseds:
+            if accused['name'] in info:
+                name = accused['name']
+                accusations = [info.split(name)[1]]
+                break
+    else:
+        name = matched.group(1)
+        accusations = [matched.group(2)]
 
     forfeit_type = ''
     forfeit = []
     prison_term = ('', '')
     reserve_prison_term = ('', '')
+
     for info in infos:
-        matched_forfeit = re.search(r'(罚金|没收财产)(?:人民币)?(.+?)元', info)
+        #                                                    fuck 人民元
+        matched_forfeit = re.search(r'(罚金|没收财产|没收个人财产)(?:计?人民[元币]为?)?(.+?)元', info)
         matched_accusation = re.search(r'犯(.+?罪)', info)
         matched_prison_term = re.search(PRISON_TERM, info)
-        matched_reserve_prison_term = re.search(r'[刑役制](?:(.+?)年)?(?:(.+?)个月)?', info)
+        matched_reserve_prison_term = re.search(r'判处.+[刑役制](?:(.+?)年)?(?:(.+?)个月)?', info)
 
         if matched_forfeit is not None:
             forfeit_type = matched_forfeit.group(1)
@@ -303,66 +347,114 @@ def get_first_accused_judgement(lines: filter) -> (str, list, str, str, int):
         elif matched_accusation is not None:
             accusations.append(matched_accusation.group(1))
         elif matched_prison_term is not None:
-            prison_term = parse_prison_term(matched_prison_term.group(1), matched_prison_term.group(2))
-        elif matched_reserve_prison_term is not None:
+            try:
+                prison_term = parse_prison_term(matched_prison_term.group(1), matched_prison_term.group(2))
+            except ValueError:
+                ()
+
+        if matched_reserve_prison_term is not None:
             reserve_prison_term = (matched_reserve_prison_term.group(1), matched_reserve_prison_term.group(2))
 
     if prison_term == ('', ''):
         matched = re.search(PRISON_TERM, next(lines))
-        prison_term = int(parse_int(reserve_prison_term[0])) * 12 + int(parse_int(reserve_prison_term[1])) \
-            if matched is None else parse_prison_term(matched.group(1), matched.group(2))
+        if matched is None:
+            prison_term = 0 if reserve_prison_term == ('', '') \
+                else int(parse_float(reserve_prison_term[0])) * 12 + int(parse_float(reserve_prison_term[1]))
+        else:
+            prison_term = 0 if matched.groups() == ('年月日', '年月日') \
+                else parse_prison_term(matched.group(1), matched.group(2))
 
-    return name, accusations, prison_term, sum(map(parse_int, forfeit)), forfeit_type
+    return name, accusations, prison_term, sum(map(parse_float, forfeit)), forfeit_type
 
 
 def parse_doc(path: str):
-    lines = read_doc(path)
-    court = get_court(lines)
-    print('法院: ', court)
+    try:
+        lines = read_doc(path)
+    except ValueError:
+        return
+
+    try:
+        court = get_court(lines)
+        print('法院: ', court)
+    except StopIteration:
+        return
+
     if skip_special_type(next(lines)):
         return
+
     case_id = next(lines)
     print('案号: ', case_id)
-    accuseds = get_accuseds(lines)
-    print('被告人: ', accuseds)
+
+    if case_id == '(简易程序独任审判案件专用)':
+        return
+
+    try:
+        accuseds = get_accuseds(lines)
+        print('被告人: ', accuseds)
+    except ValueError:
+        return
+
     min_birthday = get_min_birthday(accuseds)
     print('最小出生日期: ', min_birthday)
-    contact_infos, drugs, payments = get_detail(lines)
+
+    contact_infos, drugs, payments, shipping = get_detail(lines)
     print('联系方式: ', contact_infos)
     print('毒品: ', drugs)
     print('支付方式: ', payments)
+    print('运输方式: ', shipping)
+
     (
         first_accused_name,
         first_accused_accusation,
         first_accused_prison_term,
         first_accused_forfeit,
         first_accused_forfeit_type
-    ) = get_first_accused_judgement(lines)
+    ) = get_first_accused_judgement(lines, accuseds)
     print('第一被告人: ', first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
 
 
 def test_case(path: str):
-    lines = read_doc(path)
-    court = get_court(lines)
-    print('法院: ', court)
+    try:
+        lines = read_doc(path)
+    except ValueError:
+        return
+
+    try:
+        court = get_court(lines)
+        print('法院: ', court)
+    except StopIteration:
+        return
+
     if skip_special_type(next(lines)):
-        input()
+        return
+
     case_id = next(lines)
     print('案号: ', case_id)
-    accuseds = get_accuseds(lines)
-    print('被告人: ', accuseds)
+
+    if case_id == '(简易程序独任审判案件专用)':
+        return
+
+    try:
+        accuseds = get_accuseds(lines)
+        print('被告人: ', accuseds)
+    except ValueError:
+        return
+
     min_birthday = get_min_birthday(accuseds)
     print('最小出生日期: ', min_birthday)
-    contact_infos, drugs, payments = get_detail(lines)
+
+    contact_infos, drugs, payments, shipping = get_detail(lines)
     print('联系方式: ', contact_infos)
     print('毒品: ', drugs)
     print('支付方式: ', payments)
+    print('运输方式: ', shipping)
+
     (
         first_accused_name,
         first_accused_accusation,
         first_accused_prison_term,
         first_accused_forfeit,
         first_accused_forfeit_type
-    ) = get_first_accused_judgement(lines)
+    ) = get_first_accused_judgement(lines, accuseds)
     print('第一被告人: ', first_accused_name, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
     input()
