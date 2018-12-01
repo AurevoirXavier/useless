@@ -131,10 +131,10 @@ class Tixcraft:
             check_code = CARD_NO if '信用卡' in question else None
             if check_code is None:
                 for check_code_ in CHECK_CODES:
-                    try:
-                        check_code = re.match(rf'({check_code_})', question, re.I).group(1)
-                    except AttributeError:
-                        continue
+                    check_code = re.search(rf'({check_code_})', question, re.I)
+                    if check_code is not None:
+                        check_code = check_code.group(1)
+                        break
 
                 if check_code is None:
                     check_code = input(f'        -> {question}: ')
@@ -168,7 +168,7 @@ class Tixcraft:
         ):
             if SEAT in name:
                 return available_seats_address[id]
-        return next(iter(available_seats_address.values()))
+        return list(available_seats_address.values())[-1]
 
     def build_payload(self, url):
         while True:
@@ -186,7 +186,7 @@ class Tixcraft:
             html.xpath("/html/head/script[6]")[0].text
         ).group(1)
 
-        return csrf_token, ticket_form_ticket_price, self.get_captcha(captcha), ticket_form_agree, captcha
+        return csrf_token, ticket_form_ticket_price, self.get_captcha(captcha), ticket_form_agree
 
     @staticmethod
     def auto_captcha():
@@ -255,7 +255,7 @@ class Tixcraft:
             return
 
         url = f'https://tixcraft.com{seat}'
-        csrf_token, ticket_form_ticket_price, captcha, ticket_form_agree, img = self.build_payload(url)
+        csrf_token, ticket_form_ticket_price, captcha, ticket_form_agree = self.build_payload(url)
 
         while True:
             while True:

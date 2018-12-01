@@ -2,7 +2,7 @@
 import re
 
 
-def all_cases(path: str = '.') -> map:
+def all_cases(path: str) -> map:
     # --- std ---
     from os import listdir
 
@@ -10,7 +10,7 @@ def all_cases(path: str = '.') -> map:
         # --- std ---
         from os.path import isdir
 
-        return not d.startswith('.') and isdir(d)
+        return not d.startswith('.') and isdir(d) and d != '__pycache__'
 
     def is_file(f: str) -> bool:
         # --- std ---
@@ -367,7 +367,7 @@ def get_first_accused_judgement(lines: filter, accuseds: list) -> (list, str, st
     return accusations, prison_term, sum(map(parse_float, forfeit)), forfeit_type
 
 
-def parse_doc(path: str, save_to_csv: (bool, str) = (False, '')):
+def parse_doc(path: str, save_to_csv: (bool, str, int)):
     try:
         lines = read_doc(path)
     except ValueError:
@@ -416,25 +416,44 @@ def parse_doc(path: str, save_to_csv: (bool, str) = (False, '')):
         # --- std ---
         from csv import writer
 
-        with open(save_to_csv[1], 'a', encoding='utf-8-sig') as f:
+        def parse_key(key: str) -> str:
+            return {
+                'name': '姓名',
+                'sex': '性别',
+                'birthday': '出生时间',
+                'nation': '民族',
+                'education': '文化水平',
+                'occupation': '职业',
+                'native_place': '籍贯'
+            }[key]
+
+        with open(save_to_csv[1], 'a', encoding='utf-8-sig', newline='') as f:
             w = writer(f)
-            w.writerow([
-                court,
-                case_id,
-                ', '.join(map(lambda accused: accused['name'], accuseds)),
-                first_accused.get('name', ''),
-                first_accused.get('sex', ''),
-                f'{first_accused["birthday"][0]}年{first_accused["birthday"][1]}月{first_accused["birthday"][2]}日' if 'birthday' in first_accused else '',
-                first_accused.get('nation', ''),
-                first_accused.get('education', ''),
-                first_accused.get('occupation', ''),
-                first_accused.get('native_place', ''),
-                min_birthday,
-                '。'.join(map(lambda drug: f'{drug[0]}: {"; ".join(map(lambda detail: ", ".join(detail), drug[1]))}', drugs.items())),
-                ', '.join(contact_infos),
-                ', '.join(payments),
-                ', '.join(shippings)
-            ])
+
+            if save_to_csv[2] == 1:
+                w.writerow([
+                    court,
+                    case_id,
+                    ', '.join(map(lambda accused: accused['name'], accuseds)),
+                    first_accused.get('name', ''),
+                    first_accused.get('sex', ''),
+                    f'{first_accused["birthday"][0]}年{first_accused["birthday"][1]}月{first_accused["birthday"][2]}日' if 'birthday' in first_accused else '',
+                    first_accused.get('nation', ''),
+                    first_accused.get('education', ''),
+                    first_accused.get('occupation', ''),
+                    first_accused.get('native_place', ''),
+                    min_birthday,
+                    '。'.join(map(lambda drug: f'{drug[0]}: {"; ".join(map(lambda detail: ", ".join(detail), drug[1]))}', drugs.items())),
+                    ', '.join(contact_infos),
+                    ', '.join(payments),
+                    ', '.join(shippings)
+                ])
+            else:
+                w.writerow([
+                    court,
+                    case_id,
+                    '。'.join(map(lambda accused: ', '.join(map(lambda detail: f'{parse_key(detail[0])}: {detail[1]}', accused.items())), accuseds))
+                ])
 
 
 def test_case(path: str):

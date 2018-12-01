@@ -14,34 +14,40 @@ if __name__ == '__main__':
         with open('read_cases', 'rb') as f:
             read_cases = load(f)
 
-    for dir_name, year in all_cases():
+    mode = input('1. Normal\n2. Accuseds only\nmode -> ')
+    mode = int(mode) if mode else 1
+    path = input('path -> ')
+    path = path if path else '.'
+
+    for dir_name, year in all_cases(path=path):
         csv = f'{dir_name}.csv'
-        with open(csv, 'w', encoding='utf-8-sig') as f:
-            w = writer(f)
-            w.writerow([
-                '法院',
-                '案号',
-                '所有被告',
-                '第一被告姓名',
-                '第一被告性别',
-                '第一被告出生时间',
-                '第一被告民族',
-                '第一被告教育水平',
-                '第一被告职业',
-                '第一被告籍贯',
-                '最小出生日期',
-                '毒品',
-                '联系方式',
-                '支付方式',
-                '运输方式'
-            ])
+        with open(csv, 'w', encoding='utf-8-sig', newline='') as f:
+            if mode == 1:
+                w = writer(f)
+                w.writerow([
+                    '法院',
+                    '案号',
+                    '所有被告姓名',
+                    '第一被告姓名',
+                    '第一被告性别',
+                    '第一被告出生时间',
+                    '第一被告民族',
+                    '第一被告教育水平',
+                    '第一被告职业',
+                    '第一被告籍贯',
+                    '最小出生日期',
+                    '毒品',
+                    '联系方式',
+                    '支付方式',
+                    '运输方式'
+                ])
 
         for location in year:
             for case in location:
                 if case in read_cases:
                     continue
 
-                parse_doc(case, save_to_csv=(True, csv))
+                parse_doc(case, save_to_csv=(True, csv, mode))
 
                 read_cases.add(case)
                 with open('read_cases', 'wb') as f:
