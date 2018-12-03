@@ -416,8 +416,12 @@ def parse_doc(path: str, save_to_csv: (bool, str, int)):
         # --- std ---
         from csv import writer
 
-        def parse_key(key: str) -> str:
-            return {
+        def parse_item(item: (str, any)) -> str:
+            v = item[1]
+            if item[0] == 'birthday':
+                v = f'{v[0]}年{v[1]}月{v[2]}日'
+
+            k = {
                 'name': '姓名',
                 'sex': '性别',
                 'birthday': '出生时间',
@@ -425,7 +429,9 @@ def parse_doc(path: str, save_to_csv: (bool, str, int)):
                 'education': '文化水平',
                 'occupation': '职业',
                 'native_place': '籍贯'
-            }[key]
+            }[item[0]]
+
+            return f'{k}: {v}'
 
         with open(save_to_csv[1], 'a', encoding='utf-8-sig', newline='') as f:
             w = writer(f)
@@ -452,7 +458,7 @@ def parse_doc(path: str, save_to_csv: (bool, str, int)):
                 w.writerow([
                     court,
                     case_id,
-                    '。'.join(map(lambda accused: ', '.join(map(lambda detail: f'{parse_key(detail[0])}: {detail[1]}', accused.items())), accuseds))
+                    '。'.join(map(lambda accused: ', '.join(map(parse_item, accused.items())), accuseds))
                 ])
 
 
