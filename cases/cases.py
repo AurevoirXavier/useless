@@ -335,7 +335,7 @@ def get_first_accused_judgement(lines: filter, accuseds: list) -> (list, str, st
     reserve_prison_term = ('', '')
 
     for info in infos:
-        #                                                    fuck 人民元
+        #                                                       fuck 人民元
         matched_forfeit = re.search(r'(罚金|没收财产|没收个人财产)(?:计?人民[元币]为?)?(.+?)元', info)
         matched_accusation = re.search(r'犯(.+?罪)', info)
         matched_prison_term = re.search(PRISON_TERM, info)
@@ -364,7 +364,7 @@ def get_first_accused_judgement(lines: filter, accuseds: list) -> (list, str, st
             prison_term = 0 if matched.groups() == ('年月日', '年月日') \
                 else parse_prison_term(matched.group(1), matched.group(2))
 
-    return accusations, prison_term, sum(map(parse_float, forfeit)), forfeit_type
+    return accusations, prison_term, forfeit_type, sum(map(parse_float, forfeit))
 
 
 def parse_doc(path: str, save_to_csv: (bool, str, int)):
@@ -405,33 +405,33 @@ def parse_doc(path: str, save_to_csv: (bool, str, int)):
 
     first_accused = accuseds[0] if accuseds else {}
     (
-        first_accused_accusation,
+        first_accused_accusations,
         first_accused_prison_term,
-        first_accused_forfeit,
-        first_accused_forfeit_type
+        first_accused_forfeit_type,
+        first_accused_forfeit
     ) = get_first_accused_judgement(lines, accuseds)
-    print('第一被告人: ', first_accused, first_accused_accusation, first_accused_prison_term, first_accused_forfeit, first_accused_forfeit_type)
+    print('第一被告人: ', first_accused, first_accused_accusations, first_accused_prison_term, first_accused_forfeit_type, first_accused_forfeit)
 
     if save_to_csv[0]:
         # --- std ---
         from csv import writer
 
-        def parse_item(item: (str, any)) -> str:
-            v = item[1]
-            if item[0] == 'birthday':
-                v = f'{v[0]}年{v[1]}月{v[2]}日'
-
-            k = {
-                'name': '姓名',
-                'sex': '性别',
-                'birthday': '出生时间',
-                'nation': '民族',
-                'education': '文化水平',
-                'occupation': '职业',
-                'native_place': '籍贯'
-            }[item[0]]
-
-            return f'{k}: {v}'
+        # def parse_item(item: (str, any)) -> str:
+        #     v = item[1]
+        #     if item[0] == 'birthday':
+        #         v = f'{v[0]}年{v[1]}月{v[2]}日'
+        #
+        #     k = {
+        #         'name': '姓名',
+        #         'sex': '性别',
+        #         'birthday': '出生时间',
+        #         'nation': '民族',
+        #         'education': '文化水平',
+        #         'occupation': '职业',
+        #         'native_place': '籍贯'
+        #     }[item[0]]
+        #
+        #     return f'{k}: {v}'
 
         with open(save_to_csv[1], 'a', encoding='utf-8-sig', newline='') as f:
             w = writer(f)
@@ -448,6 +448,10 @@ def parse_doc(path: str, save_to_csv: (bool, str, int)):
                     first_accused.get('education', ''),
                     first_accused.get('occupation', ''),
                     first_accused.get('native_place', ''),
+                    ', '.join(first_accused_accusations),
+                    first_accused_prison_term,
+                    first_accused_forfeit_type,
+                    first_accused_forfeit,
                     min_birthday,
                     '。'.join(map(lambda drug: f'{drug[0]}: {"; ".join(map(lambda detail: ", ".join(detail), drug[1]))}', drugs.items())),
                     ', '.join(contact_infos),
@@ -458,7 +462,7 @@ def parse_doc(path: str, save_to_csv: (bool, str, int)):
                 w.writerow([
                     court,
                     case_id,
-                    '。'.join(map(lambda accused: ', '.join(map(parse_item, accused.items())), accuseds))
+                    '。'.join(map(lambda accused: ', '.join(map(lambda _: ''.join(map(str, _)), accused.values())), accuseds))
                 ])
 
 
