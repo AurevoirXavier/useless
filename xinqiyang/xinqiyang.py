@@ -31,7 +31,7 @@ class User(Thread):
                 f.write(content)
                 Image.open(f).show()
 
-            self.s.post(
+            resp = self.s.post(
                 'http://www.xinqiyang.cn/Home/Login/logincl',
                 data={
                     'ip': '8.8.8.8',
@@ -41,8 +41,11 @@ class User(Thread):
                 }
             )
 
+            # print(resp.text)
+
         if not self.check_sign_in():
-            remove(f'{self.username}_cookie')
+            if path.isfile(f'{self.username}_cookie'):
+                remove(f'{self.username}_cookie')
             self.sign_in(password)
         else:
             self.dump_cookie()
@@ -70,31 +73,32 @@ class User(Thread):
             self.s.cookies.update(load(f))
 
     def rush(self):
-        # --- external ---
+        # --- std ---
         from re import compile
+        # --- external ---
+        from requests.exceptions import RequestException
 
         regex = compile(r'alert\(\'(.+?)\'\)')
 
-        # while True:
-        #     resp = regex.search(self.s.get('http://www.xinqiyang.cn/Home/Myuser/qdc').text).group(1)
-        #     print(resp)
-        #     if resp != '抢单中心开放时间为19:00:00-19:30:00！':
-        #         break
+        while True:
+            for i in range(1, 41):
+                while True:
+                    try:
+                        text = self.s.get(f'http://www.xinqiyang.cn/Home/Myuser/grab/name/{i}').text.strip()
+                        break
+                    except RequestException:
+                        continue
 
-        for i in range(1, 41):
-            text = self.s.get(f'http://www.xinqiyang.cn/Home/Myuser/grab/name/{i}').text
-            # print(text)
-            matched = regex.search(text)
+                matched = regex.search(text)
 
-            if matched is None:
-                return
+                if matched is None:
+                    return
 
-            resp = matched.group(1)
-            print(f'用户 {self.username}, {i} 号 -> {resp}')
+                resp = matched.group(1)
+                print(f'用户 {self.username}, {i} 号 -> {resp}')
 
-            if resp == '抢单时间已过！':
-                print('[自动结束]')
-                break
+                if resp == '预约币不足，请先充值预约币！':
+                    return
 
 
 if __name__ == '__main__':
