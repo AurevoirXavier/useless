@@ -2,7 +2,7 @@
 from threading import Thread
 
 # --- external ---
-from requests import Session, session
+from requests import session
 
 
 class User(Thread):
