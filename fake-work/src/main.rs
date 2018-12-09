@@ -2,8 +2,7 @@ extern crate rand;
 
 // --- std ---
 use std::{
-    fs::File,
-    io::Read,
+    path::Path,
     thread::sleep,
     time::Duration,
 };
@@ -16,15 +15,7 @@ use rand::{
 };
 
 fn main() {
-    let mut status = {
-        let mut f = File::open("status").unwrap();
-        let mut status = String::new();
-
-        f.read_to_string(&mut status).unwrap();
-        status
-    };
-
-    if status == "1" {
+    if Path::new("status").is_file() {
         println!("服务器维护中");
         loop { () }
     }
