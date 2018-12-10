@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate lazy_static;
 extern crate regex;
 extern crate reqwest;
 
@@ -17,6 +19,10 @@ use reqwest::{
     ClientBuilder,
     header::{COOKIE, SET_COOKIE, HeaderMap, HeaderValue},
 };
+
+lazy_static! {
+    static ref REGEX: Regex = Regex::new(r"alert\('(.+?)'\)").unwrap();
+}
 
 struct User {
     name: String,
@@ -78,27 +84,31 @@ impl User {
         captcha
     }
 
-    fn check_online(&self) -> bool {
-        let resp = self.session.get("http://www.xinqiyang.cn/Home/Index/me").send().unwrap();
-        if resp.url().as_str() == "http://www.xinqiyang.cn/Home/Index/me" {
-            println!("User {}, sign in succeed.", self.name);
-            false
-        } else {
-            println!("User {}, sign in failed.", self.name);
-            true
+    fn sign_in(&mut self) -> bool {
+        let mut captcha = self.get_captcha(false);
+        loop {
+            let mut resp = self.session.post("http://www.xinqiyang.cn/Home/Login/logincl").form(&[
+                ("ip", "8.8.8.8"),
+                ("account", &self.name),
+                ("password", "171201"),
+                ("verCode", captcha.trim()),
+            ]).send().unwrap();
+
+            let text = resp.text().unwrap();
+            if let Some(captures) = REGEX.captures(text.trim()) {
+                let resp = captures.get(1).unwrap().as_str();
+                println!("User {}, {}", self.name, resp);
+
+                match resp {
+                    "验证码错误，请刷新验证码！" => captcha = self.get_captcha(true),
+                    "登陆成功" => return true,
+                    _ => println!("{}", resp),
+                }
+            } else {
+                println!("系统升级中,请于09:00-22:00访问!");
+                return false;
+            }
         }
-    }
-
-    fn sign_in(&mut self, retry: bool) {
-        let captcha = self.get_captcha(retry);
-        self.session.post("http://www.xinqiyang.cn/Home/Login/logincl").form(&[
-            ("ip", "8.8.8.8"),
-            ("account", &self.name),
-            ("password", "171201"),
-            ("verCode", captcha.trim()),
-        ]).send().unwrap();
-
-        if self.check_online() { self.sign_in(true); }
     }
 
     fn rush(self) {
@@ -114,19 +124,16 @@ impl User {
                         match user.session.get(&format!("http://www.xinqiyang.cn/Home/Myuser/grab/name/{}", i)).send() {
                             Ok(mut resp) => {
                                 let text = resp.text().unwrap();
-                                let regex = Regex::new(r"alert\('(.+?)'\)").unwrap();
-                                if let Some(matched) = regex.captures(&text) {
-                                    let tip = matched.get(1).unwrap().as_str();
-                                    println!("User {} at task {}, {}", user.name, i, tip);
+                                let resp = REGEX.captures(text.trim())
+                                    .unwrap()
+                                    .get(1)
+                                    .unwrap()
+                                    .as_str();
 
-                                    if tip == "预约币不足，请先充值预约币！" { *keep_rush.lock().unwrap() = false; }
-                                    break;
-                                } else {
-                                    println!("User {} at task {}, 系统升级中,请于09:00-22:00访问!", user.name, i);
+                                println!("User {} at task {}, {}", user.name, i, resp);
 
-                                    *keep_rush.lock().unwrap() = false;
-                                    break;
-                                }
+                                if resp == "预约币不足，请先充值预约币！" { *keep_rush.lock().unwrap() = false; }
+                                break;
                             }
                             Err(_) => ()
                         }
@@ -155,7 +162,7 @@ fn main() {
     };
     for account in accounts.lines() {
         let mut user = User::new(account.to_owned());
-        user.sign_in(false);
+        if !user.sign_in() { return; };
         users.push(user);
     }
 
