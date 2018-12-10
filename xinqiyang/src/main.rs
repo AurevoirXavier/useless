@@ -5,7 +5,8 @@ extern crate reqwest;
 use std::{
     fs::File,
     io::{Read, Write, stdin, stdout},
-    sync::Arc,
+    process::Command,
+    sync::{Arc, Mutex},
     thread,
 };
 
@@ -63,6 +64,12 @@ impl User {
         let mut f = File::create("captcha.png").unwrap();
         f.write(&captcha).unwrap();
 
+        Command::new("open")
+            .arg("captcha.png")
+            .spawn()
+            .unwrap();
+
+
         print!("User {}, captcha -> ", self.name);
         stdout().flush().unwrap();
 
@@ -96,25 +103,29 @@ impl User {
 
     fn rush(self) {
         let user = Arc::new(self);
-        loop {
+        let keep_rush = Arc::new(Mutex::new(true));
+        while *keep_rush.lock().unwrap() {
             let mut handlers = vec![];
             for i in 1u8..=40 {
                 let user = Arc::clone(&user);
+                let keep_rush = Arc::clone(&keep_rush);
                 let handler = thread::spawn(move || {
                     loop {
                         match user.session.get(&format!("http://www.xinqiyang.cn/Home/Myuser/grab/name/{}", i)).send() {
                             Ok(mut resp) => {
                                 let text = resp.text().unwrap();
                                 let regex = Regex::new(r"alert\('(.+?)'\)").unwrap();
-                                if let Some(matched) = regex.captures(&text){
+                                if let Some(matched) = regex.captures(&text) {
                                     let tip = matched.get(1).unwrap().as_str();
-                                    if tip == "预约币不足，请先充值预约币！" { return; }
                                     println!("User {} at task {}, {}", user.name, i, tip);
 
+                                    if tip == "预约币不足，请先充值预约币！" { *keep_rush.lock().unwrap() = false; }
                                     break;
                                 } else {
-                                    println!("系统升级中,请于09:00-22:00访问!");
-                                    return;
+                                    println!("User {} at task {}, 系统升级中,请于09:00-22:00访问!", user.name, i);
+
+                                    *keep_rush.lock().unwrap() = false;
+                                    break;
                                 }
                             }
                             Err(_) => ()
@@ -150,12 +161,7 @@ fn main() {
 
     let mut handlers = vec![];
     for user in users {
-        let handler = thread::spawn(move || {
-            let username = user.name.clone();
-            user.rush();
-
-            println!("User {}, 预约币不足，请先充值预约币！", username);
-        });
+        let handler = thread::spawn(move || user.rush());
 
         handlers.push(handler);
     }
