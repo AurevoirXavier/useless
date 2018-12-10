@@ -25,7 +25,6 @@ class User(Thread):
         if path.isfile(f'{self.username}_cookie'):
             self.load_cookie()
         else:
-            self.s.get('http://www.xinqiyang.cn')
             with TemporaryFile() as f:
                 content = self.s.get('http://www.xinqiyang.cn/Home/login/verify').content
                 f.write(content)
