@@ -107,8 +107,8 @@ if __name__ == '__main__':
         for l in f:
             user = l.split('=')
             user = User(user[0], user[1])
-            user.start()
             users.append(user)
 
     for user in users:
+        user.start()
         user.join()
