@@ -20,9 +20,7 @@ use reqwest::{
     header::{COOKIE, SET_COOKIE, HeaderMap, HeaderValue},
 };
 
-lazy_static! {
-    static ref REGEX: Regex = Regex::new(r"alert\('(.+?)'\)").unwrap();
-}
+lazy_static! { static ref REGEX: Regex = Regex::new(r"alert\('(.+?)'\)").unwrap(); }
 
 struct User {
     name: String,
@@ -101,12 +99,16 @@ impl User {
 
                 match resp {
                     "验证码错误，请刷新验证码！" => captcha = self.get_captcha(true),
-                    "登陆成功" => return true,
                     _ => println!("{}", resp),
                 }
             } else {
-                println!("系统升级中,请于09:00-22:00访问!");
-                return false;
+                if text.contains("系统升级中,请于09:00-22:00访问!") {
+                    println!("系统升级中,请于09:00-22:00访问!");
+                    return false;
+                } else {
+                    println!("User {}, sign in succeed", self.name);
+                    return true;
+                }
             }
         }
     }
@@ -132,7 +134,7 @@ impl User {
 
                                 println!("User {} at task {}, {}", user.name, i, resp);
 
-                                if resp == "预约币不足，请先充值预约币！" { *keep_rush.lock().unwrap() = false; }
+                                if resp == "预约币不足，请先充值预约币！" || resp == "一天只能抢单两次！" { *keep_rush.lock().unwrap() = false; }
                                 break;
                             }
                             Err(_) => ()
