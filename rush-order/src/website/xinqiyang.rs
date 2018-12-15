@@ -1,13 +1,7 @@
-#[macro_use]
-extern crate lazy_static;
-extern crate regex;
-extern crate reqwest;
-
 // --- std ---
 use std::{
     fs::File,
-    io::{Read, Write, stdin, stdout},
-    process::Command,
+    io::Write,
     sync::{Arc, Mutex},
     thread,
 };
@@ -16,76 +10,44 @@ use std::{
 use regex::Regex;
 use reqwest::{
     Client,
-    ClientBuilder,
-    header::{COOKIE, SET_COOKIE, HeaderMap, HeaderValue},
+    header::SET_COOKIE,
 };
+
+// --- custom ---
+use crate::user::{User, save_captcha, load_cookie};
+use super::{XINQIYANG_CAPTCHA, XINQIYANG_ORDER, XINQIYANG_SIGN_IN};
 
 lazy_static! { static ref REGEX: Regex = Regex::new(r"alert\('(.+?)'\)").unwrap(); }
 
-struct User {
+pub struct XinQiYang {
     name: String,
     session: Client,
 }
 
-impl User {
-    fn new(name: String) -> Self {
-        User {
-            name,
-            session: Client::new(),
-        }
-    }
-
-    fn save_cookie(&mut self, cookie: HeaderValue) {
-        self.session = {
-            let mut headers = HeaderMap::new();
-            headers.insert(COOKIE, cookie);
-            ClientBuilder::new()
-                .danger_accept_invalid_certs(true)
-                .danger_accept_invalid_hostnames(true)
-                .default_headers(headers)
-                .build()
-                .unwrap()
-        };
-    }
-
+impl User<XinQiYang> for XinQiYang {
     fn get_captcha(&mut self, retry: bool) -> String {
         let mut resp = self.session
-            .get("http://www.xinqiyang.cn/Home/login/verify")
+            .get(XINQIYANG_CAPTCHA)
             .send()
             .unwrap();
 
         if !retry {
-            self.save_cookie(resp.headers()
-                .get(SET_COOKIE)
-                .unwrap()
-                .to_owned()
+            load_cookie(
+                session,
+                resp.headers()
+                    .get(SET_COOKIE)
+                    .unwrap()
+                    .to_owned(),
             );
         }
 
-        let mut captcha = vec![];
-        resp.copy_to(&mut captcha).unwrap();
-
-        let mut f = File::create("captcha.png").unwrap();
-        f.write(&captcha).unwrap();
-
-        Command::new("open")
-            .arg("captcha.png")
-            .spawn()
-            .unwrap();
-
-
-        print!("User {}, captcha -> ", self.name);
-        stdout().flush().unwrap();
-
-        let mut captcha = String::new();
-        stdin().read_line(&mut captcha).unwrap();
-        captcha
+        save_captcha(resp)
     }
 
     fn sign_in(&mut self) -> bool {
         let mut captcha = self.get_captcha(false);
         loop {
-            let mut resp = self.session.post("http://www.xinqiyang.cn/Home/Login/logincl").form(&[
+            let mut resp = self.session.post(XINQIYANG_SIGN_IN).form(&[
                 ("ip", "8.8.8.8"),
                 ("account", &self.name),
                 ("password", "171201"),
@@ -113,7 +75,7 @@ impl User {
         }
     }
 
-    fn rush(self) {
+    fn order(self) {
         let user = Arc::new(self);
         let keep_rush = Arc::new(Mutex::new(true));
         while *keep_rush.lock().unwrap() {
@@ -123,7 +85,7 @@ impl User {
                 let keep_rush = Arc::clone(&keep_rush);
                 let handler = thread::spawn(move || {
                     loop {
-                        match user.session.get(&format!("http://www.xinqiyang.cn/Home/Myuser/grab/name/{}", i)).send() {
+                        match user.session.get(&format!("{}/{}", XINQIYANG_ORDER, i)).send() {
                             Ok(mut resp) => {
                                 let text = resp.text().unwrap();
                                 let resp = REGEX.captures(text.trim())
@@ -150,30 +112,11 @@ impl User {
     }
 }
 
-fn main() {
-    let mut users = vec![];
-
-    let accounts = {
-        let mut accounts = String::new();
-        File::open("accounts.txt")
-            .unwrap()
-            .read_to_string(&mut accounts)
-            .unwrap();
-
-        accounts
-    };
-    for account in accounts.lines() {
-        let mut user = User::new(account.to_owned());
-        if !user.sign_in() { return; };
-        users.push(user);
+impl XinQiYang {
+    fn new(name: &str) -> XinQiYang {
+        XinQiYang {
+            name: name.to_owned(),
+            session: Client::new(),
+        }
     }
-
-    let mut handlers = vec![];
-    for user in users {
-        let handler = thread::spawn(move || user.rush());
-
-        handlers.push(handler);
-    }
-
-    for handler in handlers { handler.join().unwrap(); }
 }
