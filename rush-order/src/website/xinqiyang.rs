@@ -1,7 +1,7 @@
 // --- std ---
 use std::{
     fs::File,
-    io::Write,
+    io::Read,
     sync::{Arc, Mutex},
     thread,
 };
@@ -10,11 +10,11 @@ use std::{
 use regex::Regex;
 use reqwest::{
     Client,
-    header::SET_COOKIE,
+    header::{COOKIE, SET_COOKIE, HeaderMap},
 };
 
 // --- custom ---
-use crate::user::{User, save_captcha, load_cookie};
+use crate::user::User;
 use super::{XINQIYANG_CAPTCHA, XINQIYANG_ORDER, XINQIYANG_SIGN_IN};
 
 lazy_static! { static ref REGEX: Regex = Regex::new(r"alert\('(.+?)'\)").unwrap(); }
@@ -24,24 +24,36 @@ pub struct XinQiYang {
     session: Client,
 }
 
-impl User<XinQiYang> for XinQiYang {
+impl XinQiYang {
+    pub fn new(name: &str) -> XinQiYang {
+        XinQiYang {
+            name: name.to_owned(),
+            session: Client::new(),
+        }
+    }
+}
+
+impl User for XinQiYang {
     fn get_captcha(&mut self, retry: bool) -> String {
-        let mut resp = self.session
+        let resp = self.session
             .get(XINQIYANG_CAPTCHA)
             .send()
             .unwrap();
 
         if !retry {
-            load_cookie(
-                session,
+            let mut header = HeaderMap::new();
+            header.insert(
+                COOKIE,
                 resp.headers()
                     .get(SET_COOKIE)
                     .unwrap()
                     .to_owned(),
             );
+
+            <XinQiYang as User>::load_header(&mut self.session, header);
         }
 
-        save_captcha(resp)
+        <XinQiYang as User>::save_read_captcha(&self.name, resp)
     }
 
     fn sign_in(&mut self) -> bool {
@@ -60,7 +72,10 @@ impl User<XinQiYang> for XinQiYang {
                 println!("User {}, {}", self.name, resp);
 
                 match resp {
-                    "验证码错误，请刷新验证码！" => captcha = self.get_captcha(true),
+                    "验证码错误，请刷新验证码！" => {
+                        captcha = self.get_captcha(true);
+                        continue;
+                    }
                     _ => println!("{}", resp),
                 }
             } else {
@@ -73,6 +88,27 @@ impl User<XinQiYang> for XinQiYang {
                 }
             }
         }
+    }
+
+    fn load_users() -> Option<Vec<XinQiYang>> {
+        let accounts = {
+            let mut accounts = String::new();
+            File::open("xinqiyang.txt")
+                .unwrap()
+                .read_to_string(&mut accounts)
+                .unwrap();
+
+            accounts
+        };
+
+        let mut users = vec![];
+        for account in accounts.lines() {
+            let mut user = XinQiYang::new(account);
+            if !user.sign_in() { return None; };
+            users.push(user);
+        }
+
+        Some(users)
     }
 
     fn order(self) {
@@ -110,13 +146,16 @@ impl User<XinQiYang> for XinQiYang {
             for handler in handlers { handler.join().unwrap(); }
         }
     }
-}
 
-impl XinQiYang {
-    fn new(name: &str) -> XinQiYang {
-        XinQiYang {
-            name: name.to_owned(),
-            session: Client::new(),
+    fn rush() {
+        if let Some(users) = XinQiYang::load_users() {
+            let mut handlers = vec![];
+            for user in users {
+                let handler = thread::spawn(|| user.order());
+                handlers.push(handler);
+            }
+
+            for handler in handlers { handler.join().unwrap(); }
         }
     }
 }

@@ -10,46 +10,46 @@ use reqwest::{
     Client,
     ClientBuilder,
     Response,
-    header::{COOKIE, SET_COOKIE, HeaderMap, HeaderValue},
+    header::HeaderMap,
 };
 
-pub trait User<U> {
+pub trait User: {
     fn get_captcha(&mut self, retry: bool) -> String;
+
+    fn load_header(session: &mut Client, header: HeaderMap) {
+        *session = ClientBuilder::new()
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true)
+            .default_headers(header)
+            .build()
+            .unwrap();
+    }
+
+    fn save_read_captcha(username: &str, mut resp: Response) -> String {
+        let mut captcha = vec![];
+        resp.copy_to(&mut captcha).unwrap();
+
+        let mut f = File::create("captcha.png").unwrap();
+        f.write(&captcha).unwrap();
+
+        Command::new("open")
+            .arg("captcha.png")
+            .spawn()
+            .unwrap();
+
+        print!("User {}, captcha -> ", username);
+        stdout().flush().unwrap();
+
+        let mut captcha = String::new();
+        stdin().read_line(&mut captcha).unwrap();
+        captcha
+    }
 
     fn sign_in(&mut self) -> bool;
 
+    fn load_users() -> Option<Vec<Self>> where Self: Sized;
+
     fn order(self);
-}
 
-pub fn load_cookie(session: &mut Client, cookie: HeaderValue) {
-    *session = {
-        let mut headers = HeaderMap::new();
-        headers.insert(COOKIE, cookie);
-        ClientBuilder::new()
-            .danger_accept_invalid_certs(true)
-            .danger_accept_invalid_hostnames(true)
-            .default_headers(headers)
-            .build()
-            .unwrap()
-    };
-}
-
-pub fn save_captcha(mut resp: Response) -> String {
-    let mut captcha = vec![];
-    resp.copy_to(&mut captcha).unwrap();
-
-    let mut f = File::create("captcha.png").unwrap();
-    f.write(&captcha).unwrap();
-
-    Command::new("open")
-        .arg("captcha.png")
-        .spawn()
-        .unwrap();
-
-    print!("User {}, captcha -> ", name);
-    stdout().flush().unwrap();
-
-    let mut captcha = String::new();
-    stdin().read_line(&mut captcha).unwrap();
-    captcha
+    fn rush();
 }

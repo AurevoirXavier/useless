@@ -2,41 +2,33 @@
 extern crate lazy_static;
 extern crate regex;
 extern crate reqwest;
-
-// --- std ---
-use std::{
-    fs::File,
-    io::Read,
-    thread,
-};
+extern crate serde_json;
 
 mod user;
 mod website;
 
+// --- std ---
+use std::io::{Write, stdin, stdout};
+
+// --- custom ---
+use self::{
+    user::User,
+    website::{
+        liuyuz::LiuYuZ,
+        xinqiyang::XinQiYang,
+    },
+};
+
 fn main() {
-//    let mut users = vec![];
-//
-//    let accounts = {
-//        let mut accounts = String::new();
-//        File::open("accounts.txt")
-//            .unwrap()
-//            .read_to_string(&mut accounts)
-//            .unwrap();
-//
-//        accounts
-//    };
-//    for account in accounts.lines() {
-//        let mut user = xinqiyang::User::new(account.to_owned());
-//        if !user.sign_in() { return; };
-//        users.push(user);
-//    }
-//
-//    let mut handlers = vec![];
-//    for user in users {
-//        let handler = thread::spawn(move || user.rush());
-//
-//        handlers.push(handler);
-//    }
-//
-//    for handler in handlers { handler.join().unwrap(); }
+    print!("1. liuyuz.com    2. xinqiyang.cn\n> ");
+    stdout().flush().unwrap();
+
+    let mut website = String::new();
+    stdin().read_line(&mut website).unwrap();
+
+    match website.trim() {
+        "1" => LiuYuZ::rush(),
+        "2" => XinQiYang::rush(),
+        _ => unreachable!()
+    }
 }
