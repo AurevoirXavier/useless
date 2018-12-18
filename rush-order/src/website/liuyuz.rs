@@ -124,7 +124,7 @@ impl User for LiuYuZ {
                                 let info = resp["info"].as_str().unwrap();
                                 println!("User {} at task {}, {}", user.name, i, info);
 
-                                if info == "预约币不足，请先充值预约币！" || info == "一天只能抢单两次！" { *keep_rush.lock().unwrap() = false; }
+                                if info == "预约币不足，请先充值预约币！" || info == "每人每天最多抢两单" { *keep_rush.lock().unwrap() = false; }
                                 break;
                             }
                             Err(_) => ()

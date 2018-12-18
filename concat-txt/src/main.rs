@@ -87,14 +87,18 @@ fn main() {
         let mut handlers = vec![];
         for entry in Path::read_dir(Path::new(".")).unwrap() {
             let path = entry.unwrap().path();
-            if is_target_dir(&path) { handlers.push(thread::spawn(move || concat_txt(read_dir(&path)))); }
+            if is_target_dir(&path) {
+                handlers.push(
+                    thread::spawn(move || {
+                        concat_txt(read_dir(&path));
+                        println!("Folder: {}, finished", path.to_str().unwrap());
+                    })
+                );
+            }
         }
 
         for handler in handlers { handler.join().unwrap(); }
-    } else {
-        let path = Path::new(&path);
-        concat_txt(read_dir(path));
-    }
+    } else { concat_txt(read_dir(&Path::new(&path))); }
 
     println!("Finished, press Enter to exit");
     let mut s = String::new();
