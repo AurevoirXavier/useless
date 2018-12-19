@@ -23,10 +23,27 @@ pub struct LiuYuZ {
 }
 
 impl LiuYuZ {
-    pub fn new(name: &str) -> LiuYuZ {
+    fn new(name: &str) -> LiuYuZ {
         LiuYuZ {
             name: name.to_owned(),
             session: Client::new(),
+        }
+    }
+
+    fn detect(&self) -> bool {
+        loop {
+            match self.session
+                .post("http://liuyuz.com/index/money/qiang")
+                .send() {
+                Ok(mut resp) => {
+                    let resp = resp.text().unwrap();
+                    if resp.trim() == "{\"status\":0,\"info\":\"抢单开放时间为20：00—20：30\"}" {
+                        println!("抢单开放时间为20：00—20：30");
+                        return false;
+                    } else { return true; }
+                }
+                Err(_) => ()
+            }
         }
     }
 }
@@ -141,6 +158,11 @@ impl User for LiuYuZ {
 
     fn rush() {
         if let Some(users) = LiuYuZ::load_users() {
+            {
+                let detector = &users[0];
+                while !detector.detect() { continue; }
+            }
+
             let mut handlers = vec![];
             for user in users {
                 let handler = thread::spawn(|| user.order());

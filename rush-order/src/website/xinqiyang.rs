@@ -25,7 +25,7 @@ pub struct XinQiYang {
 }
 
 impl XinQiYang {
-    pub fn new(name: &str) -> XinQiYang {
+    fn new(name: &str) -> XinQiYang {
         XinQiYang {
             name: name.to_owned(),
             session: Client::new(),
