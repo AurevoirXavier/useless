@@ -11,3 +11,6 @@ Cargo.lock
 *cookie
 *.png
 *.txt
+
+/target
+**/*.rs.bk
