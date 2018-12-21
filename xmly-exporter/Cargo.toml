@@ -5,3 +5,7 @@ authors = ["Xavier Lau <c.estlavie@icloud.com>"]
 edition = "2018"
 
 [dependencies]
+conrod = { version = "*", features = ["glium", "winit"] }
+lazy_static = "*"
+reqwest = "*"
+serde_json = "*"
