@@ -112,7 +112,6 @@ pub fn display() {
                     .color(button_color)
                     .label_color(label_color)
                     .press_color(button_press_color)
-                    .enabled(false)
                     .set(ids.get_album_detail_button, ui)
                     .was_clicked() {
                     tracks = album
@@ -121,20 +120,19 @@ pub fn display() {
                         .tracks_detail();
                 }
 
-//                if widget::Button::new()
-//                    .label("Export")
-//                    .w_h(widget_width, widget_height)
-//                    .label_font_size(font_size)
-//                    .mid_top_with_margin_on(ids.get_album_detail_button, 40.)
-//                    .border(0.)
-//                    .color(button_color)
-//                    .label_color(label_color)
-//                    .press_color(button_press_color)
-//                    .enabled(false)
-//                    .set(ids.download_album_button, ui)
-//                    .was_clicked() {
-//                    album.save_aria2_input_file();
-//                }
+                if widget::Button::new()
+                    .label("Export")
+                    .w_h(widget_width, widget_height)
+                    .label_font_size(font_size)
+                    .mid_top_with_margin_on(ids.get_album_detail_button, 40.)
+                    .border(0.)
+                    .color(button_color)
+                    .label_color(label_color)
+                    .press_color(button_press_color)
+                    .set(ids.download_album_button, ui)
+                    .was_clicked() {
+                    album.save_aria2_input_file();
+                }
             }
 
             {
