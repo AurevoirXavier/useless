@@ -1,3 +1,4 @@
+extern crate clipboard;
 #[macro_use]
 extern crate conrod;
 #[macro_use]

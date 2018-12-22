@@ -6,7 +6,7 @@ use super::{
 
 const ALBUM_URL: &'static str = "https://www.ximalaya.com/revision/play/album?albumId=";
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Album {
     url: String,
     name: String,
