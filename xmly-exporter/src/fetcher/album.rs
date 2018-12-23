@@ -10,7 +10,7 @@ const ALBUM_URL: &'static str = "https://www.ximalaya.com/revision/play/album?al
 pub struct Album {
     url: String,
     name: String,
-    tracks: Vec<Track>,
+    pub tracks: Vec<Track>,
 }
 
 impl Album {
@@ -40,55 +40,45 @@ impl Album {
             .to_owned()
     }
 
-    pub fn fetch(&mut self) -> &mut Self {
-        self.tracks.clear();
-
+    pub fn next_page(&mut self, page_num: u32) -> bool {
         let fetcher = FETCHER.clone();
-        for page_num in 1u8.. {
-            if let Ok(resp) = fetcher.get(&format!("{}&pageNum={}", self.url, page_num)).json::<serde_json::Value>() {
-                let data = &resp["data"];
 
-                {
-                    let tracks = data["tracksAudioPlay"].as_array().unwrap();
-                    if tracks.is_empty() { return self; }
-                    for track in tracks { self.tracks.push(Track::from_json(track)); }
-                }
+        if let Ok(resp) = fetcher.get(&format!("{}&pageNum={}", self.url, page_num)).json::<serde_json::Value>() {
+            let data = &resp["data"];
 
-                if !data["hasMore"].as_bool().unwrap() {
-                    self.name = self.get_album_name();
-                    return self;
-                }
-            } else { return self; }
-        }
+            {
+                let tracks = data["tracksAudioPlay"].as_array().unwrap();
+                if tracks.is_empty() { return false; }
+                for track in tracks { self.tracks.push(Track::from_json(track)); }
+            }
 
-        self
-    }
-
-    pub fn tracks_detail(&self) -> Vec<String> {
-        let mut detail = vec![];
-
-        for track in self.tracks.iter() {
-            let (minutes, seconds) = {
-                let duration = track.duration;
-                (duration / 60, duration % 60)
-            };
-
-            detail.push(format!("{}    {}:{:0>2}", track.name, minutes, seconds));
-        }
-
-        detail
+            if !data["hasMore"].as_bool().unwrap() {
+                self.name = self.get_album_name();
+                false
+            } else { true }
+        } else { false }
     }
 
     pub fn save_aria2_input_file(&self) -> &Self {
         // --- std ---
         use std::fs::write;
 
+        let dir = &self.name;
         let mut tracks = String::new();
+
         for track in self.tracks.iter() {
-            tracks.push_str(&format!("{}\n\tout={}\n\tdir={}\n", track.src, track.name, self.name));
+            let src = &track.src;
+
+            tracks.push_str(&format!(
+                "{}\n\tout={}.{}\n\tdir={}\n",
+                src,
+                track.title,
+                src.split('.').last().unwrap(),
+                dir,
+            ));
         }
 
-        write(&format!("{}.ax", self.name), tracks).unwrap();
+        write(&format!("{}.ax", dir), tracks).unwrap();
 
         self
     }

@@ -38,7 +38,7 @@ pub fn display() {
     widget_ids! { struct Ids {
         canvas,
         get_album_detail_button,
-        download_album_button,
+        export_album_button,
         album_id_text,
         track_list_select,
     } }
@@ -50,7 +50,6 @@ pub fn display() {
 
     let album = Arc::new(Mutex::new(Album::new()));
     let mut album_id = String::from("Album Id");
-    let tracks = Arc::new(Mutex::new(vec![]));
     let mut track_selected = std::collections::HashSet::new();
 
     let mut event_loop = EventLoop::new();
@@ -95,7 +94,7 @@ pub fn display() {
                 .w_h(widget_width, widget_height)
                 .font_size(font_size)
                 .color(color::WHITE)
-                .top_left_with_margins_on(ids.canvas, margin, margin)
+                .mid_bottom_with_margin_on(ids.get_album_detail_button, margin)
                 .center_justify()
                 .set(ids.album_id_text, ui);
 
@@ -108,7 +107,7 @@ pub fn display() {
                     .label("Detail")
                     .w_h(widget_width, widget_height)
                     .label_font_size(font_size)
-                    .mid_top_with_margin_on(ids.album_id_text, margin)
+                    .mid_bottom_with_margin_on(ids.export_album_button, margin)
                     .border(0.)
                     .color(button_color)
                     .label_color(label_color)
@@ -117,7 +116,10 @@ pub fn display() {
                     .set(ids.get_album_detail_button, ui)
                     .was_clicked() {
                     // --- std ---
-                    use std::thread::spawn;
+                    use std::{
+                        time::Duration,
+                        thread::{sleep, spawn},
+                    };
                     // --- external ---
                     use clipboard::ClipboardProvider;
                     use clipboard::ClipboardContext;
@@ -126,17 +128,20 @@ pub fn display() {
                     if let Ok(paste) = ctx.get_contents() {
                         if paste.chars().all(|c| c.is_digit(10)) && album_id != paste {
                             album_id = paste;
+                            album.lock().unwrap().set_id(&album_id).tracks.clear();
 
                             let album = album.clone();
-                            let album_id = album_id.clone();
-                            let tracks = tracks.clone();
                             spawn(move ||
-                                *tracks.lock().unwrap() = album
-                                    .lock()
-                                    .unwrap()
-                                    .set_id(&album_id)
-                                    .fetch()
-                                    .tracks_detail()
+                                for page_num in 1u32.. {
+                                    if !album
+                                        .lock()
+                                        .unwrap()
+                                        .next_page(page_num) {
+                                        break;
+                                    }
+
+                                    sleep(Duration::from_millis(16));
+                                }
                             );
                         }
                     }
@@ -146,13 +151,13 @@ pub fn display() {
                     .label("Export")
                     .w_h(widget_width, widget_height)
                     .label_font_size(font_size)
-                    .mid_top_with_margin_on(ids.get_album_detail_button, margin)
+                    .bottom_right_with_margins_on(ui.window, margin, margin)
                     .border(0.)
                     .color(button_color)
                     .label_color(label_color)
                     .press_color(button_press_color)
                     .enabled(false)
-                    .set(ids.download_album_button, ui)
+                    .set(ids.export_album_button, ui)
                     .was_clicked() {
                     if !album_id.is_empty() {
                         if let Ok(album) = album.try_lock() { album.save_aria2_input_file(); }
@@ -161,15 +166,14 @@ pub fn display() {
             }
 
             {
-                let tracks = tracks.lock().unwrap();
-                let tracks_amount = tracks.len();
-                let (mut events, scrollbar) = widget::ListSelect::multiple(tracks_amount)
+                let ref mut tracks = album.lock().unwrap().tracks;
+                let (mut events, scrollbar) = widget::ListSelect::multiple(tracks.len())
                     .flow_down()
                     .item_size(widget_height)
                     .scrollbar_color(color::WHITE)
                     .scrollbar_next_to()
                     .w_h(ui.win_w - 200., ui.win_h - 80.)
-                    .top_right_with_margins_on(ids.canvas, margin, margin)
+                    .top_left_with_margins_on(ids.canvas, margin, margin)
                     .set(ids.track_list_select, ui);
 
                 while let Some(event) = events.next(ui, |i| track_selected.contains(&i)) {
@@ -178,7 +182,7 @@ pub fn display() {
 
                     match event {
                         Event::Item(item) => {
-                            let label = &tracks[item.i];
+                            let label = &tracks[item.i].title;
                             let (color, label_color) = match track_selected.contains(&item.i) {
                                 true => (color::LIGHT_BLUE, color::YELLOW),
                                 false => (color::LIGHT_GREY, color::BLACK),
@@ -193,12 +197,14 @@ pub fn display() {
                         }
                         Event::Selection(selection) => {
                             selection.update_index_set(&mut track_selected);
-//                        println!("selected indices: {:?}", track_selected);
-                        }
-                        _event => {
-                            ()
-//                        println!("{:?}", &_event)
-                        }
+
+                            if let Some(selected) = track_selected.iter().next() {
+                                let ref mut track = tracks[*selected];
+                                track.update();
+                                println!("{:?}", track);
+                            }
+                        },
+                        _ => ()
                     }
                 }
 
