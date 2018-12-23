@@ -2,12 +2,16 @@ pub mod album;
 mod track;
 
 // --- std ---
-use std::sync::Arc;
-
+use std::{
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 // --- external ---
 use reqwest::{Client, Response};
 
-struct Fetcher(Client);
+pub struct Fetcher(Client);
 
 impl Fetcher {
     fn new(client: Client) -> Fetcher { Fetcher(client) }
@@ -20,10 +24,22 @@ impl Fetcher {
             }
         }
     }
+
+    pub fn fetch_to_temp_file(&self, url: &str, path: &Path) -> PathBuf {
+        let mut image = vec![];
+        self.get(url).copy_to(&mut image).unwrap();
+
+        let path = path.join(url.split("/").last().unwrap());
+        let mut file = File::create(&path).unwrap();
+        file.write_all(&mut image).unwrap();
+        file.sync_all().unwrap();
+
+        path.to_owned()
+    }
 }
 
 lazy_static! {
-    static ref FETCHER: Arc<Fetcher> = {
+    pub static ref FETCHER: Arc<Fetcher> = {
         let mut header = reqwest::header::HeaderMap::new();
         header.insert(reqwest::header::USER_AGENT, "Mozilla/5.0".parse().unwrap());
 

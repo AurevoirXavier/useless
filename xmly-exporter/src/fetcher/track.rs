@@ -14,7 +14,7 @@ pub struct Track {
     pub album_title: String,
     pub nickname: String,
     pub category: String,
-    pub cover_url: String,
+    pub cover: String,
     pub src: String,
 }
 
@@ -32,7 +32,7 @@ impl Track {
             album_title: String::new(),
             nickname: String::new(),
             category: String::new(),
-            cover_url: json["trackCoverPath"].as_str().unwrap().to_owned(),
+            cover: json["trackCoverPath"].as_str().unwrap().to_owned(),
             src: json["src"].as_str().unwrap().to_owned()
         }
     }
@@ -50,6 +50,6 @@ impl Track {
         self.likes = json["favorites_count"].as_u64().unwrap();
         self.album_title = json["album_title"].as_str().unwrap().to_owned();
         self.nickname = json["nickname"].as_str().unwrap().to_owned();
-        self.category = json["category_title"].as_str().unwrap().to_owned();
+        self.category = json["category_name"].as_str().unwrap().to_owned();
     }
 }

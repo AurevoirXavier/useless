@@ -7,6 +7,9 @@ edition = "2018"
 [dependencies]
 clipboard = "*"
 conrod = { version = "*", features = ["glium", "winit"] }
+image = "*"
 lazy_static = "*"
+rand = "*"
 reqwest = "*"
 serde_json = "*"
+tempfile = "*"
