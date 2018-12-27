@@ -84,11 +84,11 @@ fn main() {
     };
 
     if path.is_empty() {
-        let mut handlers = vec![];
+        let mut handles = vec![];
         for entry in Path::read_dir(Path::new(".")).unwrap() {
             let path = entry.unwrap().path();
             if is_target_dir(&path) {
-                handlers.push(
+                handles.push(
                     thread::spawn(move || {
                         concat_txt(read_dir(&path));
                         println!("Folder: {}, finished", path.to_str().unwrap());
@@ -97,7 +97,7 @@ fn main() {
             }
         }
 
-        for handler in handlers { handler.join().unwrap(); }
+        for handle in handles { handle.join().unwrap(); }
     } else { concat_txt(read_dir(&Path::new(&path))); }
 
     println!("Finished, press Enter to exit");

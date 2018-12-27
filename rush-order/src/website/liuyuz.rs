@@ -126,11 +126,11 @@ impl User for LiuYuZ {
         let user = Arc::new(self);
         let keep_rush = Arc::new(Mutex::new(true));
         while *keep_rush.lock().unwrap() {
-            let mut handlers = vec![];
+            let mut handles = vec![];
             for i in 1u8..=40 {
                 let user = Arc::clone(&user);
                 let keep_rush = Arc::clone(&keep_rush);
-                let handler = thread::spawn(move || {
+                let handle = thread::spawn(move || {
                     loop {
                         match user.session
                             .post(LIUYUZ_ORDER)
@@ -149,10 +149,10 @@ impl User for LiuYuZ {
                     }
                 });
 
-                handlers.push(handler);
+                handles.push(handle);
             }
 
-            for handler in handlers { handler.join().unwrap(); }
+            for handle in handles { handle.join().unwrap(); }
         }
     }
 
@@ -163,13 +163,13 @@ impl User for LiuYuZ {
                 while !detector.detect() { continue; }
             }
 
-            let mut handlers = vec![];
+            let mut handles = vec![];
             for user in users {
-                let handler = thread::spawn(|| user.order());
-                handlers.push(handler);
+                let handle = thread::spawn(|| user.order());
+                handles.push(handle);
             }
 
-            for handler in handlers { handler.join().unwrap(); }
+            for handle in handles { handle.join().unwrap(); }
         }
     }
 }
