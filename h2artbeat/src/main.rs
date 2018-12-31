@@ -1,3 +1,4 @@
+extern crate regex;
 extern crate rumblr;
 extern crate serde_json;
 
