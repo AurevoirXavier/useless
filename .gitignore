@@ -12,6 +12,7 @@ Cargo.lock
 *.png
 *.txt
 *.keys
+*.json
 
 /target
 **/*.rs.bk
