@@ -152,8 +152,6 @@ impl Vanguard {
     }
 
     pub fn start() {
-        { COMMENT.as_str(); }
-
         let page_amount: u32 = {
             let mut user = String::new();
 
@@ -164,24 +162,12 @@ impl Vanguard {
             user.trim().parse().unwrap()
         };
 
-        let vanguard = VANGUARD.clone();
+        let comment = !COMMENT.is_empty();
         for page in 1..=page_amount {
-            let html = vanguard.fetch_order_page(page);
+            let html = VANGUARD.fetch_order_page(page);
             let order_page = OrderPage::new(&html);
 
-            if !order_page.parse().has_next() { break; }
+            if !order_page.parse(comment).has_next() { break; }
         }
     }
-}
-
-#[test]
-fn test_fetch_order_page() {
-    let vanguard = Vanguard::new("SERVERID=ec293173e36e8a9aefcf5670980749e2|1545291158|1545287070; JSESSIONID=F2CBB59B2D1450B695A14AEFB75BEA2C; _ati=557235074828");
-    println!("{}", vanguard.fetch_order_page(1));
-}
-
-#[test]
-fn test_send_comment() {
-    let vanguard = Vanguard::new("SERVERID=ec293173e36e8a9aefcf5670980749e2|1545295842|1545287070; JSESSIONID=F2CBB59B2D1450B695A14AEFB75BEA2C; _ati=557235074828");
-    vanguard.send_comment("248780229603758281", "8a0426ed675bce8401675ea2ab8c19d3");
 }
