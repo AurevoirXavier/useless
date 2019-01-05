@@ -161,14 +161,14 @@ class Tixcraft:
         if matched == '[]':
             return None
 
-        available_seats_address = loads(matched)
-        for id, name in zip(
+        available_seat_addresses = loads(matched)
+        for seat_id, name in zip(
                 html.xpath('//ul[@class="area-list"]/li/a/@id'),
                 html.xpath('//ul[@class="area-list"]/li/a/text()')
         ):
             if SEAT in name:
-                return available_seats_address[id]
-        return list(available_seats_address.values())[-1]
+                return available_seat_addresses[seat_id]
+        return list(available_seat_addresses.values())[0]
 
     def build_payload(self, url):
         while True:
