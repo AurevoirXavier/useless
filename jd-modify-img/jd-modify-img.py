@@ -1,15 +1,13 @@
-from os import path, makedirs
+# --- std ---
+from os import makedirs
+from shutil import rmtree
 from time import sleep
+# --- external ---
 from lxml import etree
 from requests import session
 from selenium import webdriver
 
 GOODS_API = 'https://ware.shop.jd.com/onSaleWare/onSaleWare_newDoSearch.action?page={}'
-
-
-def init():
-    if not path.isdir('cookies'):
-        makedirs('cookies')
 
 
 def dump_cookies(cookies, username):
@@ -33,34 +31,31 @@ def build_session(cookies):
 
 
 def sign_in(username, password):
-    if path.isfile(f'cookies/{username}'):
-        cookies = load_cookies(username)
-    else:
-        with webdriver.Chrome() as browser:
-            browser.get('https://passport.jd.com/common/loginPage?from=pop_vender')
-            sleep(1)
-            browser.find_element_by_id('loginname').send_keys(username)
-            browser.find_element_by_id('nloginpwd').send_keys(password)
-            browser.find_element_by_id('paipaiLoginSubmit').click()
-            sleep(3)
+    with webdriver.Chrome() as browser:
+        browser.get('https://passport.jd.com/common/loginPage?from=pop_vender')
+        sleep(1)
+        browser.find_element_by_id('loginname').send_keys(username)
+        browser.find_element_by_id('nloginpwd').send_keys(password)
+        browser.find_element_by_id('paipaiLoginSubmit').click()
+        sleep(10)
 
-            cookies = browser.get_cookies()
-            dump_cookies(cookies, username)
+        browser.get(GOODS_API.format(1))
+        sleep(10)
+        cookies = browser.get_cookies()
 
-    return cookies
+    dump_cookies(cookies, username)
 
 
 def fetch_goods(s):
     goods_list = []
     page = 1
     while True:
-        print(f'第 {page} 页')
         resp = s.get(GOODS_API.format(page))
         html = etree.HTML(resp.text)
         for good in html.xpath('//*[@id="tbl_type2"]/tbody/tr'):
             goods_list.append(good.xpath('./td[8]/div/div/div[2]/ul/li/a')[0].attrib['href'])
 
-        if html.xpath('//*[@class="next-disabled"]'):
+        if not goods_list or html.xpath('//*[@class="next-disabled"]'):
             break
 
         page += 1
@@ -90,18 +85,25 @@ def modify_imgs(cookies, goods_list):
 
 
 if __name__ == '__main__':
-    init()
+    makedirs('cookies')
 
     with open('accounts.txt', 'r') as f:
-        accounts = f.read()
+        text = f.read()
 
-    for account in accounts.splitlines():
+    accounts = []
+    for account in text.splitlines():
         account = account.split(' ')
         username = account[0]
         password = account[1]
 
-        cookies = sign_in(username, password)
+        sign_in(username, password)
+        accounts.append((username, password))
+
+    for username, password in accounts:
+        cookies = load_cookies(username)
         s = build_session(cookies)
         goods_list = fetch_goods(s)
 
         modify_imgs(cookies, goods_list)
+
+    rmtree('cookies')
