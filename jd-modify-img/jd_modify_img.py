@@ -1,5 +1,5 @@
 # --- std ---
-from os import makedirs
+from os import makedirs, path
 from shutil import rmtree
 from time import sleep
 # --- external ---
@@ -85,6 +85,8 @@ def modify_imgs(cookies, goods_list):
 
 
 if __name__ == '__main__':
+    if path.isdir('cookies'):
+        rmtree('cookies')
     makedirs('cookies')
 
     with open('accounts.txt', 'r') as f:
