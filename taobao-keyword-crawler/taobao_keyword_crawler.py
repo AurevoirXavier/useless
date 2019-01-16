@@ -61,11 +61,23 @@ def fuck_taobao(browser):
         pass
 
 
+def get(browser, url):
+    from selenium.common.exceptions import TimeoutException
+
+    while True:
+        try:
+            browser.get(url)
+            break
+        except TimeoutException:
+            pass
+
+
 def sign_in():
     from selenium import webdriver
 
     browser = webdriver.Chrome()
     browser.set_page_load_timeout(10)
+    browser.set_script_timeout(10)
     browser.get('https://login.taobao.com?f=top')
     browser.find_element_by_id('J_Quick2Static').click()
     browser.find_element_by_id('TPL_username_1').send_keys(USERNAME)
@@ -77,14 +89,7 @@ def sign_in():
 
 
 def parse_page(browser, keyword, page):
-    from selenium.common.exceptions import TimeoutException
-
-    while True:
-        try:
-            browser.get(PAGE.format(keyword, page * 44))
-            break
-        except TimeoutException:
-            pass
+    get(browser, PAGE.format(keyword, page * 44))
 
     while True:
         g_page_config = search(r'g_page_config = (.+?);\n', browser.page_source)
@@ -109,13 +114,7 @@ def parse_auction(auction, browser):
     location = auction['item_loc']
     nick = auction['nick']
 
-    while True:
-        try:
-            browser.get(url)
-            break
-        except TimeoutException:
-            pass
-
+    get(browser, url)
     print(url)
 
     if 'taobao' in url:
@@ -128,20 +127,24 @@ def parse_auction(auction, browser):
             month_sales = browser.find_element_by_id('J_SellCounter').text
             if month_sales != '-':
                 break
-
     elif 'tmall' in url:
         while True:
             try:
-                WebDriverWait(browser, 30, 0.1).until(EC.presence_of_all_elements_located((By.XPATH, '//span[@class="tm-price"]')))
+                month_sales = browser.find_element_by_xpath('//*[@id="J_DetailMeta"]/div[1]/div[1]/div/ul/li[1]/div/span[2]').text
+                break
+            except NoSuchElementException:
+                browser.switch_to.frame('sufei-dialog-content')
+                fuck_taobao(browser)
+                browser.switch_to.default_content()
+
+        while True:
+            try:
+                WebDriverWait(browser, 10, 0.1).until(EC.presence_of_all_elements_located((By.XPATH, '//span[@class="tm-price"]')))
                 break
             except TimeoutException:
                 pass
 
         price_item = browser.find_element_by_xpath('//span[@class="tm-price"]').text
-        try:
-            month_sales = browser.find_element_by_xpath('//*[@id="J_DetailMeta"]/div[1]/div[1]/div/ul/li[1]/div/span[2]').text
-        except NoSuchElementException:
-            month_sales = '无法获取'
     else:
         print(url)
         raise ValueError
