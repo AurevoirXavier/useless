@@ -13,7 +13,7 @@ class User:
     def __init__(self):
         self.__session = requests.session()
 
-    def get_csrf(self, url, headers=None):
+    def get_csrf(self, url, heastders=None):
         from lxml import etree
 
         while True:

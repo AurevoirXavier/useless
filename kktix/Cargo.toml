@@ -1,10 +1,8 @@
 [package]
-name = "h2artbeat"
+name = "kktix"
 version = "0.1.0"
 authors = ["Xavier Lau <c.estlavie@icloud.com>"]
 edition = "2018"
 
 [dependencies]
-regex = "*"
-rumblr = "*"
-serde_json = "*"
+reqwest = "0.9.9"
