@@ -13,7 +13,7 @@ class User:
     def __init__(self):
         self.__session = requests.session()
 
-    def get_csrf(self, url, heastders=None):
+    def get_csrf(self, url, headers={}):
         from lxml import etree
 
         while True:
@@ -70,7 +70,7 @@ class User:
                         'user[remember_me]': 0,
                         'commit': 'Sign+In'
                     },
-                    headers=COMMON_HEADERS,
+                    headers={},
                     timeout=TIMEOUT
                 )
                 self.dump_cookies()
