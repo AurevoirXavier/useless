@@ -1,13 +1,15 @@
 extern crate reqwest;
+extern crate serde_json;
 extern crate select;
 
 // --- external ---
+use serde_json::Value;
 use reqwest::{
     Client,
     header::HeaderMap,
 };
 
-fn default_client() -> Client {
+fn default_client(headers: HeaderMap) -> Client {
     // --- std ---
     use std::time::Duration;
     // --- external ---
@@ -16,6 +18,7 @@ fn default_client() -> Client {
     ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .danger_accept_invalid_hostnames(true)
+        .default_headers(headers)
         .gzip(true)
         .timeout(Duration::from_secs(3))
         .build()
@@ -30,6 +33,10 @@ impl Kktix {
         headers.insert(COOKIE, cookie.parse().unwrap());
 
         Kktix(default_client(headers))
+    }
+
+    fn get_register_info(&self) -> Value {
+        unimplemented!()
     }
 }
 
