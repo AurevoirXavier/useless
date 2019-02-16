@@ -50,7 +50,7 @@ def fetch_goods(s):
     goods_list = []
     page = 1
     while True:
-        resp = s.get(GOODS_API.format(page))
+        resp = s._get(GOODS_API.format(page))
         html = etree.HTML(resp.text)
         for good in html.xpath('//*[@id="tbl_type2"]/tbody/tr'):
             goods_list.append(good.xpath('./td[8]/div/div/div[2]/ul/li/a')[0].attrib['href'])

@@ -114,7 +114,7 @@ class User:
 
         if 'token' in token: return token['token']
 
-        while token.get('result') == 'CAPTCHA_WRONG_ANSWER':
+        while token._get('result') == 'CAPTCHA_WRONG_ANSWER':
             token = self.get_token(
                 url,
                 PAYLOAD_WITH_CAPTCHA.format(
@@ -148,7 +148,7 @@ class User:
             print('    [✗] All sold out')
             return
 
-        ktx_captcha = register_info.get('ktx_captcha')
+        ktx_captcha = register_info._get('ktx_captcha')
         question = ktx_captcha['question'] if ktx_captcha else None
         ktx_captcha = input(f'    [?] Question\n    -> {question}: ').strip() if question else None
 

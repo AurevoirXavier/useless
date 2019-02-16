@@ -60,7 +60,7 @@ def selenium_get(browser, url):
 
     while True:
         try:
-            browser.get(url)
+            browser._get(url)
             break
         except TimeoutException:
             pass
