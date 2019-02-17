@@ -127,17 +127,17 @@ if __name__ == '__main__':
     with open('keywords.txt', 'r') as f:
         keywords = f.readlines()
 
-    with open('result.txt', 'w') as f:
-        taobao = Taobao()
-        for keyword in keywords:
-            keyword, count = keyword.split('@')
-            count = int(count)
-            if count != 0:
-                keywords = taobao.start(keyword, count)
-                result = keyword + ': {\n    '
-                result += '\n    '.join([f'"{keyword}": {count},' for keyword, count in keywords])
-                result += '\n}\n\n'
-                f.write(result)
-                f.flush()
-
-        taobao.browser.close()
+    # with open('result.txt', 'w') as f:
+    #     taobao = Taobao()
+    #     for keyword in keywords:
+    #         keyword, count = keyword.split('@')
+    #         count = int(count)
+    #         if count != 0:
+    #             keywords = taobao.start(keyword, count)
+    #             result = keyword + ': {\n    '
+    #             result += '\n    '.join([f'"{keyword}": {count},' for keyword, count in keywords])
+    #             result += '\n}\n\n'
+    #             f.write(result)
+    #             f.flush()
+    #
+    #     taobao.browser.close()
