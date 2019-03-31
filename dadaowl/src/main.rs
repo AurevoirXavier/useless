@@ -8,9 +8,7 @@ mod order_page;
 mod vanguard;
 
 // --- custom ---
-use self::{
-    vanguard::Vanguard
-};
+use self::vanguard::Vanguard;
 
 fn main() {
     if !Vanguard::auth() {
