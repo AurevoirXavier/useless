@@ -1,3 +1,4 @@
+# --- std ---
 import json
 import pickle
 from os.path import isfile
@@ -5,6 +6,14 @@ from random import randint, random
 from requests import session
 from time import sleep, time
 from uuid import uuid1
+# --- custom ---
+from rk import RClient
+
+rc = RClient('339472578', 'dj123456', 'soft_id', 'soft_key')
+result = rc.rk_create(open('captcha.png', 'rb').read(), 3040)
+print(result)
+
+sleep(1000)
 
 s = session()
 s.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0.3 Safari/605.1.15'
