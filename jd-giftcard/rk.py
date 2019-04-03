@@ -5,7 +5,7 @@ from hashlib import md5
 class RClient(object):
     def __init__(self, username, password, soft_id, soft_key):
         self.username = username
-        self.password = md5(password).hexdigest()
+        self.password = md5(password.encode()).hexdigest()
         self.soft_id = soft_id
         self.soft_key = soft_key
         self.base_params = {
@@ -28,4 +28,10 @@ class RClient(object):
         params.update(self.base_params)
         files = {'image': ('a.jpg', im)}
         r = requests.post('http://api.ruokuai.com/create.json', data=params, files=files, headers=self.headers)
+        return r.json()
+
+    def rk_report_error(self, im_id):
+        params = {'id': im_id}
+        params.update(self.base_params)
+        r = requests.post('http://api.ruokuai.com/reporterror.json', data=params, headers=self.headers)
         return r.json()
