@@ -52,8 +52,6 @@ class JdAccount:
                 if resp.status_code == 200:
                     break
 
-                # print(resp.text)
-
             j = json.loads(resp.text[13:-1])
 
             if j['code'] == 200:
@@ -203,18 +201,18 @@ class JdAccount:
 
                             if j['code'] == 'frequently':
                                 for i in range(60, -1, -1):
-                                    print(f'\r{i}', end='')
+                                    print('\r{:>2}'.format(i), end='')
                                     sleep(1)
 
                                 print()
                             else:
                                 return j
-                elif j['code'] in ['bindself', 'bindother']:
+                elif j['code'] in ['bindedself', 'bindedother']:
                     return j
                 else:
                     if j['code'] == 'frequently':
                         for i in range(60, -1, -1):
-                            print(f'\r{i}', end='')
+                            print('\r{:>2}'.format(i), end='')
                             sleep(1)
 
                         print()
@@ -237,10 +235,10 @@ if __name__ == '__main__':
             s = f'key: {gift_card_pwd}, 总值: {j["data"][0]["amountTotal"]}, 余额: {j["data"][0]["amount"]}, 有效期至: {j["data"][0]["timeEnd"]}\n'
 
             if j['code'] == 'nobind':
-                with open('unbind.txt', 'a') as f:
+                with open('unbinded.txt', 'a') as f:
                     f.write(s)
             else:
-                with open('bind.txt', 'a') as f:
+                with open('binded.txt', 'a') as f:
                     f.write(s)
     elif argv[1] == 'bind':
         for gift_card_pwd in open('keys.txt', 'r'):
