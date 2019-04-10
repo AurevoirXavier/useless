@@ -1,0 +1,9 @@
+[account]
+username = "test1234"
+password = "test1234"
+thread = 10
+
+[ticket]
+event_id = "1spartanrace0511kids"
+id = 155674
+quantity = 1
