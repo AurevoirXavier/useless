@@ -14,12 +14,14 @@ use reqwest::{
     header::HeaderMap,
 };
 use serde_json::Value;
+use std::io::Write;
 
 #[derive(Debug)]
 enum KktixError {
     AccountError,
-    ParamError,
+    AnswerError,
     TokenError,
+    Exit(String),
     ReqwestError(ReqwestError),
 }
 
@@ -38,7 +40,7 @@ struct Conf {
 
 #[derive(Deserialize)]
 struct Account {
-    thread: u32,
+    thread: usize,
     username: String,
     password: String,
 }
@@ -48,6 +50,13 @@ struct Ticket {
     id: u32,
     quantity: u32,
     event_id: String,
+    date: String,
+}
+
+#[derive(Clone)]
+enum Answer {
+    FillBlank(String),
+    Choice(Vec<String>),
 }
 
 fn reqwest_get(client: &Client, url: &str, headers: HeaderMap) -> Result<Response, KktixError> {
@@ -91,16 +100,50 @@ fn set_cookie(headers: &HeaderMap) -> HeaderMap {
     headers
 }
 
-fn solve_question(question: &str) -> String {
+fn get_csrf(headers: &HeaderMap) -> String {
+    let cookies = headers.get("cookie")
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    cookies[cookies.find("XSRF-TOKEN=").unwrap() + 11..cookies.len()].to_owned()
+}
+
+fn solve_question(question: &str, date: &str) -> Answer {
+    // --- std ---
+    use std::io::{stdin, stdout};
     // --- external ---
     use regex::Regex;
 
-    for re in [
-        Regex::new(r"(.+)").unwrap(),
-        Regex::new(r"「(.+)」").unwrap()
-    ].iter() { if let Some(caps) = re.captures(question) { return caps[1].to_owned(); } }
+    if question.is_empty() { return Answer::FillBlank(String::new()) }
 
-    panic!("unsupported question: {}", question)
+    if question.contains("日期") {
+        let re = Regex::new(r"請輸入(\d+)").unwrap();
+        if let Some(caps) = re.captures(question) { return Answer::FillBlank(date[caps[1].len() - date.len()..].to_string()); }
+    }
+
+    if question.contains('?') {
+        for choice in [
+            vec!["Aa1", "Bb2", "Cc3", "Dd4"],
+            vec!["A1", "B2", "C3", "D4"],
+            vec!["A", "B", "C", "D"],
+            vec!["a", "b", "c", "d"],
+            vec!["A", "B", "C"],
+            vec!["a", "b", "c"]
+        ].iter() { if choice.iter().all(|s| question.contains(s)) { return Answer::Choice(choice.into_iter().map(|s| s.to_string()).collect()); } }
+    }
+
+    for re in [
+        Regex::new(r"「(.+?)」").unwrap(),
+        Regex::new(r"“(.+?)”").unwrap(),
+    ].iter() { if let Some(caps) = re.captures(question) { return Answer::FillBlank(caps[1].to_owned()); } }
+
+    print!("Q: {}\nA: ", question);
+    stdout().flush().unwrap();
+    let mut s = String::new();
+    stdin().read_line(&mut s).unwrap();
+
+    Answer::FillBlank(s.trim().to_owned())
 }
 
 fn load_conf() -> Conf {
@@ -133,7 +176,7 @@ impl Kktix {
             .danger_accept_invalid_hostnames(true)
             .gzip(true)
             .redirect(RedirectPolicy::none())
-            .timeout(Duration::from_secs(3))
+            .timeout(Duration::from_secs(5))
             .build()
             .unwrap();
         let headers = {
@@ -141,14 +184,6 @@ impl Kktix {
                 &client,
                 "https://kktix.com/users/sign_in",
                 HeaderMap::new())?.headers());
-            let authenticity_token = {
-                let cookies = headers.get("cookie")
-                    .unwrap()
-                    .to_str()
-                    .unwrap();
-
-                urlparse::unquote(&cookies[cookies.find("XSRF-TOKEN=").unwrap() + 11..cookies.len()]).unwrap()
-            };
 
             set_cookie(reqwest_post_form(
                 &client,
@@ -156,7 +191,7 @@ impl Kktix {
                 headers.clone(),
                 &[
                     ("utf8", "✓"),
-                    ("authenticity_token", &authenticity_token),
+                    ("authenticity_token", &urlparse::unquote(get_csrf(&headers)).unwrap()),
                     ("user[login]", username),
                     ("user[password]", password),
                     ("user[remember_me]", "0"),
@@ -167,12 +202,12 @@ impl Kktix {
         if reqwest_get(&client, "https://kktix.com/users/edit", headers.clone())?.status() == 302 { Err(KktixError::AccountError) } else { Ok(Kktix { client, headers }) }
     }
 
-    fn register_info(&self, event_id: &str) -> Result<(String, String), KktixError> {
+    fn register_info(&self, event_id: &str, date: &str) -> Result<(Answer, String), KktixError> {
         let register_info = to_json(reqwest_get(&self.client, &format!("https://kktix.com/g/events/{}/register_info", event_id), self.headers.clone())?)?;
-        let question = register_info["ktx_captcha"]["question"].as_str().unwrap();
+        let question = if let Some(question) = register_info["ktx_captcha"].get("question") { question.as_str().unwrap() } else { "" };
 
         Ok((
-            solve_question(question),
+            solve_question(question, date),
             register_info["order"]["price_currency"]
                 .as_str()
                 .unwrap()
@@ -180,23 +215,10 @@ impl Kktix {
         ))
     }
 
-    fn queue(&self, ticket: &Ticket) -> Result<(), KktixError> {
-        // --- std ---
-        use std::{
-            thread::sleep,
-            time::Duration,
-        };
-
-        let cookies = self.headers.get("cookie")
-            .unwrap()
-            .to_str()
-            .unwrap();
-        let authenticity_token = &cookies[cookies.find("XSRF-TOKEN=").unwrap() + 11..cookies.len()];
-        let (answer, currency) = self.register_info(&ticket.event_id)?;
-
-        if let Some(token) = to_json(reqwest_post_json(
+    fn queue(&self, ticket: &Ticket, answer: &str, currency: &str) -> Result<String, KktixError> {
+        let result = to_json(reqwest_post_json(
             &self.client,
-            &format!("https://queue.kktix.com/queue/{}?authenticity_token={}", ticket.event_id, authenticity_token),
+            &format!("https://queue.kktix.com/queue/{}?authenticity_token={}", ticket.event_id, get_csrf(&self.headers)),
             self.headers.clone(),
             &json!({
                 "agreeTerm": true,
@@ -211,20 +233,45 @@ impl Kktix {
                     "use_qualification_id": Value::Null
                 })]
             }),
-        )?)?.get("token") {
-            sleep(Duration::from_millis(200));
+        )?)?;
 
-            if let Some(param) = to_json(reqwest_get(&self.client, &format!("https://queue.kktix.com/queue/token/{}", token.as_str().unwrap()), HeaderMap::new())?)?.get("to_param") {
-                println!("https://kktix.com/events/{}/registrations/{}#", ticket.event_id, param.as_str().unwrap());
-                Ok(())
-            } else { Err(KktixError::ParamError) }
-        } else { Err(KktixError::TokenError) }
+        if let Some(token) = result.get("token") { Ok(token.as_str().unwrap().to_owned()) } else {
+            let result = result["result"].as_str().unwrap();
+            if result == "CAPTCHA_WRONG_ANSWER" { Err(KktixError::AnswerError) } else {
+                println!("{}", result);
+                Err(KktixError::TokenError)
+            }
+        }
+    }
+
+    fn link(&self, event_id: &str, token: &str) -> Result<String, KktixError> {
+        loop {
+            if let Ok(resp) = reqwest_get(&self.client, &format!("https://queue.kktix.com/queue/token/{}", token), HeaderMap::new()) {
+                let result = to_json(resp).unwrap();
+
+                if let Some(param) = result.get("to_param") {
+                    let link = format!("https://kktix.com/events/{}/registrations/{}#", event_id, param.as_str().unwrap());
+                    println!("{}", link);
+
+                    return Ok(link);
+                }
+
+                if let Some(result) = result.get("result") {
+                    if result.as_str().unwrap() == "not_found" { continue; }
+                    println!("{:?}", result);
+                }
+
+                return Err(KktixError::Exit(result.to_string()));
+            }
+        }
     }
 }
 
-fn main() {
+fn order_ticket() -> Result<(), KktixError> {
     // --- std ---
     use std::{
+        fs::{File, OpenOptions},
+        path::Path,
         sync::{
             Arc, Mutex,
             mpsc::{TryRecvError, channel},
@@ -232,41 +279,83 @@ fn main() {
         thread::spawn,
     };
 
-    let conf = load_conf();
-    match Kktix::sign_in(&conf.account.username, &conf.account.password) {
-        Ok(kktix) => {
-            let (tx, rx) = channel();
-            let tx = Arc::new(Mutex::new(tx));
-            let rx = Arc::new(Mutex::new(rx));
-            let kktix = Arc::new(kktix);
-            let ticket = Arc::new(conf.ticket);
+    let Conf { account, ticket } = load_conf();
+    let thread = account.thread;
+    let kktix = Kktix::sign_in(&account.username, &account.password)?;
+    let (answer, currency) = kktix.register_info(&ticket.event_id, &ticket.date)?;
+    let kktix = Arc::new(kktix);
+    let ticket = Arc::new(ticket);
+    let f = {
+        let path = Path::new("tickets.txt");
+        let f = if !path.is_file() { File::create(path).unwrap() } else {
+            OpenOptions::new()
+                .write(true)
+                .open(path)
+                .unwrap()
+        };
 
-            for i in 0..conf.account.thread {
-                let tx = tx.clone();
-                let rx = rx.clone();
-                let thread = conf.account.thread;
-                let kktix = kktix.clone();
-                let ticket = ticket.clone();
+        Arc::new(Mutex::new(f))
+    };
 
-                spawn(move || loop {
-                    println!("thread {} start", i);
-                    match rx.lock().unwrap().try_recv() {
-                        Ok(_) | Err(TryRecvError::Disconnected) => {
-                            println!("thread {} end", i);
-                            break;
-                        }
-                        Err(TryRecvError::Empty) => ()
-                    }
+    let (tx, rx) = channel();
+    let tx = Arc::new(Mutex::new(tx));
+    let rx = Arc::new(Mutex::new(rx));
 
-                    match kktix.queue(&ticket) {
-                        Ok(_) => for _ in 0..thread { tx.lock().unwrap().send(()).unwrap(); }
-                        Err(e) => println!("{:?}", e)
-                    }
-                });
+    let mut handlers = vec![];
+    for i in 1..=thread {
+        let currency = currency.clone();
+        let answer = match answer.clone() {
+            Answer::FillBlank(s) => s,
+            Answer::Choice(ary) => ary[i % ary.len()].to_owned(),
+        };
+        let kktix = kktix.clone();
+        let ticket = ticket.clone();
+        let f = f.clone();
+
+        let tx = tx.clone();
+        let rx = rx.clone();
+
+        handlers.push(spawn(move || loop {
+            println!("thread {} working", i);
+            match rx.lock().unwrap().try_recv() {
+                Ok(_) | Err(TryRecvError::Disconnected) => {
+                    println!("thread {} end", i);
+                    break;
+                }
+                Err(TryRecvError::Empty) => ()
             }
-        }
-        Err(e) => println!("{:?}", e)
-    }
 
-    loop {}
+            match kktix.queue(&ticket, &answer, &currency) {
+                Ok(token) => {
+                    for _ in 0..thread { tx.lock().unwrap().send(()).unwrap(); }
+
+                    match kktix.link(&ticket.event_id, &token) {
+                        Ok(link) => {
+                            let mut f = f.lock().unwrap();
+                            f.write((link + "\n").as_bytes()).unwrap();
+                            f.sync_all().unwrap();
+                            f.flush().unwrap();
+                        }
+                        Err(KktixError::Exit(result)) => println!("{}, thread {} end", result, i),
+                        _ => unreachable!()
+                    }
+
+                    break;
+                }
+                Err(e) => match e {
+                    KktixError::AnswerError => {
+                        println!("wrong answer {}, thread {} end", answer, i);
+                        break;
+                    }
+                    KktixError::TokenError => (),
+                    _ => println!("{:?}", e)
+                }
+            }
+        }));
+    }
+    for handler in handlers { handler.join().unwrap(); }
+
+    Ok(())
 }
+
+fn main() { if let Err(e) = order_ticket() { println!("{:?}", e); } }
