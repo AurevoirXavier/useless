@@ -1,10 +1,10 @@
 [account]
 thread = 100
-username = "test1234"
-password = "test1234"
+username = ""
+password = ""
 
 [ticket]
-id = 171755
-quantity = 2
-event_id = "ablossomhouse1904"
-date = "20190517"
+id = 167924
+quantity = 1
+event_id = ""
+date = ""
