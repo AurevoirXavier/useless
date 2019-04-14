@@ -50,7 +50,6 @@ struct Ticket {
     id: u32,
     quantity: u32,
     event_id: String,
-    date: String,
 }
 
 #[derive(Clone)]
@@ -109,20 +108,15 @@ fn get_csrf(headers: &HeaderMap) -> String {
     cookies[cookies.find("XSRF-TOKEN=").unwrap() + 11..cookies.len()].to_owned()
 }
 
-fn solve_question(question: &str, date: &str) -> Answer {
+fn solve_question(question: &str) -> Answer {
     // --- std ---
     use std::io::{stdin, stdout};
     // --- external ---
     use regex::Regex;
 
-    if question.is_empty() { return Answer::FillBlank(String::new()) }
+    if question.is_empty() { return Answer::FillBlank(String::new()); }
 
-    if question.contains("日期") {
-        let re = Regex::new(r"請輸入(\d+)").unwrap();
-        if let Some(caps) = re.captures(question) { return Answer::FillBlank(date[caps[1].len() - date.len()..].to_string()); }
-    }
-
-    if question.contains('?') {
+    if question.contains('?') || question.contains('？') {
         for choice in [
             vec!["Aa1", "Bb2", "Cc3", "Dd4"],
             vec!["A1", "B2", "C3", "D4"],
@@ -202,17 +196,23 @@ impl Kktix {
         if reqwest_get(&client, "https://kktix.com/users/edit", headers.clone())?.status() == 302 { Err(KktixError::AccountError) } else { Ok(Kktix { client, headers }) }
     }
 
-    fn register_info(&self, event_id: &str, date: &str) -> Result<(Answer, String), KktixError> {
+    fn register_info(&self, event_id: &str) -> Result<(Answer, String), KktixError> {
         let register_info = to_json(reqwest_get(&self.client, &format!("https://kktix.com/g/events/{}/register_info", event_id), self.headers.clone())?)?;
-        let question = if let Some(question) = register_info["ktx_captcha"].get("question") { question.as_str().unwrap() } else { "" };
+        let status = register_info["inventory"]["registerStatus"].as_str().unwrap();
 
-        Ok((
-            solve_question(question, date),
-            register_info["order"]["price_currency"]
-                .as_str()
-                .unwrap()
-                .to_owned()
-        ))
+        if status == "IN_STOCK" {
+            let question = if let Some(question) = register_info["ktx_captcha"].get("question") { question.as_str().unwrap() } else { "" };
+            Ok((
+                solve_question(question),
+                register_info["order"]["price_currency"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            ))
+        } else {
+            println!("{}", status);
+            self.register_info(event_id)
+        }
     }
 
     fn queue(&self, ticket: &Ticket, answer: &str, currency: &str) -> Result<String, KktixError> {
@@ -282,7 +282,7 @@ fn order_ticket() -> Result<(), KktixError> {
     let Conf { account, ticket } = load_conf();
     let thread = account.thread;
     let kktix = Kktix::sign_in(&account.username, &account.password)?;
-    let (answer, currency) = kktix.register_info(&ticket.event_id, &ticket.date)?;
+    let (answer, currency) = kktix.register_info(&ticket.event_id)?;
     let kktix = Arc::new(kktix);
     let ticket = Arc::new(ticket);
     let f = {
@@ -303,11 +303,11 @@ fn order_ticket() -> Result<(), KktixError> {
 
     let mut handlers = vec![];
     for i in 1..=thread {
-        let currency = currency.clone();
         let answer = match answer.clone() {
             Answer::FillBlank(s) => s,
             Answer::Choice(ary) => ary[i % ary.len()].to_owned(),
         };
+        let currency = currency.clone();
         let kktix = kktix.clone();
         let ticket = ticket.clone();
         let f = f.clone();
