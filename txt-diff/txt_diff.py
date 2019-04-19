@@ -54,4 +54,5 @@ with open('all.txt', 'r') as f:
 
         data += line
 
-print(fields)
+for k, v in zip(fields_name, fields):
+    print(f'{k}: {v}')
