@@ -1,7 +1,6 @@
 # --- std ---
-from os import mkdir
+from os import listdir, mkdir, rename
 from os.path import isdir
-from shutil import copyfile
 
 check_name = True
 fields = [0 for _ in range(15)]
@@ -19,40 +18,55 @@ for name in fields_name:
     if not isdir(path):
         mkdir(path)
 
-with open('all.txt', 'r') as f:
-    data = ''
-    while True:
-        line = f.readline()
+for f in listdir(''):
+    if f.endswith('_Groundtruth.txt'):
+        num, _ = f.split('_Groundtruth.txt')
 
-        if check_name:
-            if line.isspace():
-                check_name = True
-            else:
-                num = line.strip()[-8:-4]
-                check_name = False
-
-            continue
-
-        if (line.isspace() or not line) and num:
-            with open(f'all/{num}.txt', 'r') as cmp_f:
-                data = data.strip().splitlines()
-                cmp_data = cmp_f.read().strip().splitlines()
+        with open(f, 'r') as gt_f:
+            with open(num, 'r') as cmp_f:
+                gt_text = gt_f.read().strip().splitlines()
+                cmp_text = cmp_f.read().strip().splitlines()
 
                 for i in range(15):
-                    if data[i] == cmp_data[i]:
+                    if gt_text[i] == cmp_text[i]:
                         fields[i] += 1
                     else:
-                        copyfile(f'all/{num}.jpg', f'error/{fields_name[i]}/{num}_{data[i]}_{cmp_data[i]}.jpg')
+                        rename(f'cmp/{num}.jpg', f'error/{fields_name[i]}/{num}_{gt_text[i]}_{cmp_text[i]}.jpg')
 
-            check_name = True
-            data = ''
-
-            continue
-
-        if not line:
-            break
-
-        data += line
-
-for k, v in zip(fields_name, fields):
-    print(f'{k}: {v}')
+# with open('cmp.txt', 'r') as f:
+#     data = ''
+#     while True:
+#         line = f.readline()
+#
+#         if check_name:
+#             if line.isspace():
+#                 check_name = True
+#             else:
+#                 num = line.strip()[-8:-4]
+#                 check_name = False
+#
+#             continue
+#
+#         if (line.isspace() or not line) and num:
+#             with open(f'cmp/{num}.txt', 'r') as cmp_f:
+#                 data = data.strip().splitlines()
+#                 cmp_data = cmp_f.read().strip().splitlines()
+#
+#                 for i in range(15):
+#                     if data[i] == cmp_data[i]:
+#                         fields[i] += 1
+#                     else:
+#                         copyfile(f'cmp/{num}.jpg', f'error/{fields_name[i]}/{num}_{data[i]}_{cmp_data[i]}.jpg')
+#
+#             check_name = True
+#             data = ''
+#
+#             continue
+#
+#         if not line:
+#             break
+#
+#         data += line
+#
+# for k, v in zip(fields_name, fields):
+#     print(f'{k}: {v}')

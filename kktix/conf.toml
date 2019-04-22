@@ -1,9 +1,9 @@
 [account]
-thread = 100
-username = "test1234"
-password = "test1234"
+thread = 1000
+username = "hwyou033@gmail.com"
+password = "12345678"
 
 [ticket]
-id = 177990
+id = 178507
 quantity = 1
-event_id = "26f3ae86"
+event_id = "ags1r24g"
