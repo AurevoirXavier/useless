@@ -1,5 +1,5 @@
 [package]
-name = "concat-txt"
+name = "txt-concat"
 version = "0.1.0"
 authors = ["Xavier Lau <c.estlavie@icloud.com>"]
 edition = "2018"

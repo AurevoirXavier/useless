@@ -11,6 +11,8 @@ fields_name = [
     'duration3', 'school3', 'department3', 'major3'
 ]
 
+if not isdir('miss'):
+    mkdir('miss')
 if not isdir('error'):
     mkdir('error')
 for name in fields_name:
@@ -18,12 +20,16 @@ for name in fields_name:
     if not isdir(path):
         mkdir(path)
 
-for f in listdir(''):
-    if f.endswith('_Groundtruth.txt'):
-        num, _ = f.split('_Groundtruth.txt')
+misses = set(filter(lambda s: s.endswith('.txt'), listdir('cmp')))
 
-        with open(f, 'r') as gt_f:
-            with open(num, 'r') as cmp_f:
+for f in listdir('result'):
+    if f.endswith('_Result.txt'):
+        num, _ = f.split('_Result.txt')
+
+        misses.remove(f'{num}.txt')
+
+        with open(f'result/{f}', 'r') as gt_f:
+            with open(f'cmp/{num}.txt', 'r') as cmp_f:
                 gt_text = gt_f.read().strip().splitlines()
                 cmp_text = cmp_f.read().strip().splitlines()
 
@@ -32,6 +38,9 @@ for f in listdir(''):
                         fields[i] += 1
                     else:
                         rename(f'cmp/{num}.jpg', f'error/{fields_name[i]}/{num}_{gt_text[i]}_{cmp_text[i]}.jpg')
+
+for miss in misses:
+    rename(f'cmp/{miss}', f'miss/{miss}')
 
 # with open('cmp.txt', 'r') as f:
 #     data = ''
