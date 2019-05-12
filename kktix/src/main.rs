@@ -326,7 +326,7 @@ fn order_ticket() -> Result<(), KktixError> {
                     KktixError::AnswerError => {
                         println!("wrong answer {}, thread {} end", answer, i);
                         break;
-                    }cd
+                    }
                     KktixError::TokenError => (),
                     _ => println!("{:?}", e)
                 }
