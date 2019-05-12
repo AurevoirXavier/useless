@@ -52,12 +52,6 @@ struct Ticket {
     event_id: String,
 }
 
-#[derive(Clone)]
-enum Answer {
-    FillBlank(String),
-    Choice(Vec<String>),
-}
-
 fn reqwest_get(client: &Client, url: &str, headers: HeaderMap) -> Result<Response, KktixError> {
     match client.get(url).headers(headers).send() {
         Ok(resp) => Ok(resp),
@@ -108,36 +102,25 @@ fn get_csrf(headers: &HeaderMap) -> String {
     cookies[cookies.find("XSRF-TOKEN=").unwrap() + 11..cookies.len()].to_owned()
 }
 
-fn solve_question(question: &str) -> Answer {
+fn solve_question(question: &str) -> String {
     // --- std ---
     use std::io::{stdin, stdout};
     // --- external ---
     use regex::Regex;
 
-    if question.is_empty() { return Answer::FillBlank(String::new()); }
-
-    if question.contains('?') || question.contains('？') {
-        for choice in [
-            vec!["Aa1", "Bb2", "Cc3", "Dd4"],
-            vec!["A1", "B2", "C3", "D4"],
-            vec!["A", "B", "C", "D"],
-            vec!["a", "b", "c", "d"],
-            vec!["A", "B", "C"],
-            vec!["a", "b", "c"]
-        ].iter() { if choice.iter().all(|s| question.contains(s)) { return Answer::Choice(choice.into_iter().map(|s| s.to_string()).collect()); } }
-    }
+    if question.is_empty() { return String::new(); }
 
     for re in [
         Regex::new(r"「(.+?)」").unwrap(),
         Regex::new(r"“(.+?)”").unwrap(),
-    ].iter() { if let Some(caps) = re.captures(question) { return Answer::FillBlank(caps[1].to_owned()); } }
+    ].iter() { if let Some(caps) = re.captures(question) { return caps[1].to_owned(); } }
 
     print!("Q: {}\nA: ", question);
     stdout().flush().unwrap();
     let mut s = String::new();
     stdin().read_line(&mut s).unwrap();
 
-    Answer::FillBlank(s.trim().to_owned())
+    s.trim().to_owned()
 }
 
 fn load_conf() -> Conf {
@@ -196,7 +179,7 @@ impl Kktix {
         if reqwest_get(&client, "https://kktix.com/users/edit", headers.clone())?.status() == 302 { Err(KktixError::AccountError) } else { Ok(Kktix { client, headers }) }
     }
 
-    fn register_info(&self, event_id: &str) -> Result<(Answer, String), KktixError> {
+    fn register_info(&self, event_id: &str) -> Result<(String, String), KktixError> {
         let register_info = to_json(reqwest_get(&self.client, &format!("https://kktix.com/g/events/{}/register_info", event_id), self.headers.clone())?)?;
         let status = register_info["inventory"]["registerStatus"].as_str().unwrap();
 
@@ -303,10 +286,7 @@ fn order_ticket() -> Result<(), KktixError> {
 
     let mut handlers = vec![];
     for i in 1..=thread {
-        let answer = match answer.clone() {
-            Answer::FillBlank(s) => s,
-            Answer::Choice(ary) => ary[i % ary.len()].to_owned(),
-        };
+        let answer = answer.clone();
         let currency = currency.clone();
         let kktix = kktix.clone();
         let ticket = ticket.clone();
