@@ -2,7 +2,7 @@
 use std::{
     process::Command,
     sync::Mutex,
-    thread,
+    thread::sleep,
     time::Duration,
 };
 
@@ -44,10 +44,22 @@ impl OrderPage {
                 .unwrap();
             let app_scheme = format!("aliim:sendmsg?touid=cntaobao{}", name);
 
-            Command::new("cmd.exe")
-                .args(&["/C", "start", &app_scheme])
-                .spawn()
-                .unwrap();
+            #[cfg(windows)]
+            {
+                Command::new("cmd.exe")
+                    .args(&["/C", "start", &app_scheme])
+                    .spawn()
+                    .unwrap();
+
+                unsafe {
+                    use winapi::um::winuser::{
+                        VK_HOME,
+                        GetAsyncKeyState,
+                    };
+
+                    if GetAsyncKeyState(VK_HOME) & 1 != 0 { loop { if GetAsyncKeyState(VK_HOME) & 1 != 0 { break; } } }
+                }
+            }
 
             if comment {
                 let ids = user.find(Class("visitCommentsInput"))
@@ -64,7 +76,7 @@ impl OrderPage {
                     .as_str();
 
                 VANGUARD.send_comment(&tid, &trade_oid);
-                thread::sleep(Duration::from_millis(100));
+                sleep(Duration::from_millis(500));
             }
 
             let mut count = COUNT.lock().unwrap();

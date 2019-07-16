@@ -113,6 +113,8 @@ impl Vanguard {
             ).text().unwrap();
 
             if resp == "success" { return; }
+
+            thread::sleep(Duration::from_millis(500));
         }
     }
 

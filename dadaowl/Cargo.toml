@@ -9,3 +9,6 @@ lazy_static = "*"
 regex = "*"
 reqwest = "*"
 select = "*"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser"] }
